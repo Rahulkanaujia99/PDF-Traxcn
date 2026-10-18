@@ -5,6 +5,20 @@ from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger("supabase_service")
 
+try:
+    from dotenv import load_dotenv
+    # Load backend/.env first, then root .env
+    backend_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    root_env = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(backend_env):
+        load_dotenv(backend_env, override=True)
+    elif os.path.exists(root_env):
+        load_dotenv(root_env, override=True)
+    else:
+        load_dotenv(override=True)
+except Exception:
+    pass
+
 # Check for Supabase credentials from environment
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_KEY = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "").strip()
