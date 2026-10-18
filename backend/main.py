@@ -17,6 +17,7 @@ import pymupdf
 
 from pdf_processor import PDFProcessor
 from sample_generator import create_sample_tracxn_pdf
+from supabase_service import supabase_service
 
 app = FastAPI(
     title="PDF Disclaimer Cleaner API",
@@ -136,6 +137,11 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
                 content={"error": f"Failed to parse '{safe_filename}'. Document may be corrupted."}
             )
 
+        raw_storage_path = None
+        if supabase_service.is_enabled:
+            raw_storage_path = f"{file_id}/{safe_filename}"
+            supabase_service.upload_pdf_bytes("raw-pdfs", raw_storage_path, content)
+
         record = {
             "id": file_id,
             "filename": safe_filename,
@@ -144,7 +150,9 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             "formatted_size": format_size(file_size),
             "page_count": page_count,
             "upload_path": upload_path,
+            "raw_storage_path": raw_storage_path,
             "processed_path": None,
+            "cleaned_storage_path": None,
             "status": "READY",  # READY, PROCESSING, SUCCESS, NO_MATCH, NEEDS_REVIEW, FAILED
             "progress": 0,
             "pages_scanned": 0,
@@ -158,6 +166,8 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             "created_at": time.time()
         }
         files_db[file_id] = record
+        if supabase_service.is_enabled:
+            supabase_service.upsert_file_record(record)
         uploaded_records.append(record)
 
     return {"files": uploaded_records}
@@ -180,6 +190,13 @@ def generate_sample_report():
     page_count = len(doc)
     doc.close()
 
+    raw_storage_path = None
+    if supabase_service.is_enabled:
+        with open(upload_path, "rb") as f:
+            sample_bytes = f.read()
+        raw_storage_path = f"{file_id}/{filename}"
+        supabase_service.upload_pdf_bytes("raw-pdfs", raw_storage_path, sample_bytes)
+
     record = {
         "id": file_id,
         "filename": filename,
@@ -188,7 +205,9 @@ def generate_sample_report():
         "formatted_size": format_size(file_size),
         "page_count": page_count,
         "upload_path": upload_path,
+        "raw_storage_path": raw_storage_path,
         "processed_path": None,
+        "cleaned_storage_path": None,
         "status": "READY",
         "progress": 0,
         "pages_scanned": 0,
@@ -202,6 +221,8 @@ def generate_sample_report():
         "created_at": time.time()
     }
     files_db[file_id] = record
+    if supabase_service.is_enabled:
+        supabase_service.upsert_file_record(record)
     return {"file": record}
 
 
@@ -213,6 +234,8 @@ def execute_pdf_processing(file_id: str):
 
     record["status"] = "PROCESSING"
     record["progress"] = 5
+    if supabase_service.is_enabled:
+        supabase_service.update_file_record(file_id, {"status": "PROCESSING", "progress": 5})
 
     try:
         input_path = record["upload_path"]
@@ -223,10 +246,24 @@ def execute_pdf_processing(file_id: str):
             pct = int((current / total) * 85) + 10
             record["progress"] = pct
             record["pages_scanned"] = current
+            if supabase_service.is_enabled:
+                supabase_service.update_file_record(file_id, {
+                    "progress": pct,
+                    "pages_scanned": current,
+                    "status": "PROCESSING"
+                })
 
         result = processor.process_pdf(input_path, output_path, progress_callback=on_progress)
 
+        cleaned_storage_path = None
+        if supabase_service.is_enabled and os.path.exists(output_path):
+            with open(output_path, "rb") as f:
+                cleaned_bytes = f.read()
+            cleaned_storage_path = f"{file_id}/{output_filename}"
+            supabase_service.upload_pdf_bytes("cleaned-pdfs", cleaned_storage_path, cleaned_bytes)
+
         record["processed_path"] = output_path
+        record["cleaned_storage_path"] = cleaned_storage_path
         record["status"] = result["status"]
         record["progress"] = 100
         record["pages_scanned"] = result["pages_scanned"]
@@ -237,10 +274,19 @@ def execute_pdf_processing(file_id: str):
         record["validation"] = result["validation"]
         record["page_details"] = result["page_details"]
 
+        if supabase_service.is_enabled:
+            supabase_service.upsert_file_record(record)
+
     except Exception as e:
         record["status"] = "FAILED"
         record["progress"] = 100
         record["error_message"] = f"Processing error: {str(e)}"
+        if supabase_service.is_enabled:
+            supabase_service.update_file_record(file_id, {
+                "status": "FAILED",
+                "progress": 100,
+                "error_message": record["error_message"]
+            })
 
 
 @app.post("/api/process/{file_id}")
@@ -267,11 +313,37 @@ async def process_all_files(background_tasks: BackgroundTasks):
 
 @app.get("/api/files")
 def list_files():
-    """Returns list of all files with current state."""
-    # Convert files_db to list sorted by creation time
+    """Returns list of all files with current state, merging with Supabase if active."""
+    if supabase_service.is_enabled:
+        db_records = supabase_service.list_all_files()
+        if db_records is not None:
+            for item in db_records:
+                fid = str(item["id"])
+                if fid not in files_db:
+                    files_db[fid] = item
+                else:
+                    files_db[fid].update(item)
     records = list(files_db.values())
     records.sort(key=lambda r: r.get("created_at", 0), reverse=True)
     return {"files": records}
+
+
+@app.delete("/api/files/{file_id}")
+def delete_single_file(file_id: str):
+    """Deletes a single file from memory, disk, and Supabase."""
+    record = files_db.pop(file_id, None)
+    if supabase_service.is_enabled:
+        raw_p = record.get("raw_storage_path") if record else None
+        clean_p = record.get("cleaned_storage_path") if record else None
+        supabase_service.delete_file_record(file_id, raw_p, clean_p)
+    if record:
+        for p in [record.get("upload_path"), record.get("processed_path")]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+    return {"message": f"File {file_id} deleted."}
 
 
 @app.get("/api/status/{file_id}")
@@ -387,8 +459,10 @@ def download_all_zip():
 
 @app.delete("/api/clear")
 def clear_all():
-    """Clears all session files and resets memory state."""
+    """Clears all session files and resets memory state and Supabase tables."""
     files_db.clear()
+    if supabase_service.is_enabled:
+        supabase_service.clear_all()
     for directory in [UPLOAD_DIR, PROCESSED_DIR]:
         if os.path.exists(directory):
             for fname in os.listdir(directory):
