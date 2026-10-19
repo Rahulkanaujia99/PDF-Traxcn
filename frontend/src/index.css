@@ -296,7 +296,7 @@ body {
 .hero-wrapper {
   position: relative;
   overflow: hidden;
-  padding: 56px 20px 60px;
+  padding: 40px 20px 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -444,3 +444,85 @@ body {
   gap: 14px;
   width: 100%;
 }
+
+/* Horizontal Pill Navigation (Image 2 Inspiration) */
+.nav-pill-container {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 5px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  gap: 4px;
+}
+
+.nav-pill-item {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 8px 22px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.nav-pill-item:hover:not(.active) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-pill-item.active {
+  background: #315cff;
+  color: #ffffff;
+  box-shadow: 0 2px 14px rgba(49, 92, 255, 0.45);
+}
+
+.nav-counter {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.nav-pill-item:not(.active) .nav-counter {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+/* Page Layout Container */
+.page-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 36px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  flex: 1;
+}
+
+/* Image 1 Process Dashboard Toolbar */
+.queue-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 14px;
+}
+

@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   FileText, CheckCircle2, AlertTriangle, AlertCircle, 
-  Download, Eye, ShieldCheck, Play, Loader2, Sparkles 
+  Download, ShieldCheck, Play, Loader2, Sparkles 
 } from 'lucide-react';
 
 export interface FileRecord {
@@ -28,7 +28,6 @@ export interface FileRecord {
 interface FileItemCardProps {
   file: FileRecord;
   onProcess: (id: string) => void;
-  onPreview: (file: FileRecord) => void;
   onViewReport: (file: FileRecord) => void;
   onDownload: (id: string, filename?: string) => void;
 }
@@ -36,7 +35,6 @@ interface FileItemCardProps {
 export const FileItemCard: React.FC<FileItemCardProps> = ({
   file,
   onProcess,
-  onPreview,
   onViewReport,
   onDownload
 }) => {
@@ -183,7 +181,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         </div>
       )}
 
-      {/* Bottom Actions Row */}
+      {/* Bottom Actions Row (Before/After Preview removed per specification) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -195,25 +193,14 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {isProcessed && (
-            <>
-              <button
-                onClick={() => onPreview(file)}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '6px 16px' }}
-                title="View interactive before & after visual comparison"
-              >
-                <Eye size={15} color="#38bdf8" /> Before / After Preview
-              </button>
-
-              <button
-                onClick={() => onViewReport(file)}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '6px 16px' }}
-                title="View QA validation certificate"
-              >
-                <ShieldCheck size={15} color="#10b981" /> QA Certificate
-              </button>
-            </>
+            <button
+              onClick={() => onViewReport(file)}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.82rem', padding: '6px 16px' }}
+              title="View QA validation certificate"
+            >
+              <ShieldCheck size={15} color="#10b981" /> QA Certificate
+            </button>
           )}
         </div>
 
