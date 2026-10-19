@@ -3,7 +3,7 @@ import {
   FileText, CheckCircle2, AlertTriangle, AlertCircle, 
   Download, ShieldCheck, Play, Loader2, Sparkles 
 } from 'lucide-react';
-import { InfinityLoopLoader } from './InfinityLoopLoader';
+import { ThemeLiquidLoader } from './ThemeLiquidLoader';
 
 export interface FileRecord {
   id: string;
@@ -146,11 +146,13 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         </div>
       </div>
 
-      {/* Glowing Infinity-Loop Animation (Image 3 & Reference 2) when processing */}
+      {/* Liquid Theme Animation (IDWO0BQDxw) when processing */}
       {file.status === 'PROCESSING' ? (
-        <InfinityLoopLoader
+        <ThemeLiquidLoader
           statusText={`Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`}
-          progress={file.progress}
+          subText={`${file.progress}% Completed`}
+          width="100%"
+          height={48}
         />
       ) : file.progress > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

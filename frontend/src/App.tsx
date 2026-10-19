@@ -9,7 +9,7 @@ import { FileItemCard } from './components/FileItemCard';
 import type { FileRecord } from './components/FileItemCard';
 import { ValidationReportModal } from './components/ValidationReportModal';
 import { ConduitBackground } from './components/ConduitBackground';
-import { LottieLoader } from './components/LottieLoader';
+import { ThemeLiquidLoader } from './components/ThemeLiquidLoader';
 import { API_BASE } from './config';
 
 type PageType = 'home' | 'process' | 'documents';
@@ -680,7 +680,7 @@ export const App: React.FC = () => {
                     </button>
 
                     {isUploading ? (
-                      <LottieLoader statusText="Uploading Document..." size={84} />
+                      <ThemeLiquidLoader statusText="Uploading Document..." width={280} height={50} />
                     ) : (
                       <button
                         type="button"
