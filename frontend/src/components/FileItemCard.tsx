@@ -86,42 +86,46 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
 
   return (
     <div className="glass-panel" style={{
-      padding: '20px 24px',
+      padding: '22px 26px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '14px',
-      position: 'relative'
+      gap: '16px',
+      position: 'relative',
+      borderRadius: '20px',
+      background: 'var(--bg-card)'
     }}>
       {/* Top Row: File icon, names, status badge */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: 1 }}>
           <div style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '12px',
+            width: '46px',
+            height: '46px',
+            borderRadius: '14px',
             background: isProcessed 
               ? 'rgba(16, 185, 129, 0.12)' 
-              : 'rgba(56, 189, 248, 0.12)',
+              : 'rgba(49, 92, 255, 0.12)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: isProcessed ? '#34d399' : '#38bdf8',
-            border: `1px solid ${isProcessed ? 'rgba(16, 185, 129, 0.25)' : 'rgba(56, 189, 248, 0.25)'}`
+            color: isProcessed ? '#34d399' : '#315cff',
+            border: `1px solid ${isProcessed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(49, 92, 255, 0.3)'}`,
+            flexShrink: 0
           }}>
             <FileText size={22} />
           </div>
 
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h4 style={{
-              fontSize: '1.02rem',
+              fontSize: '1.05rem',
               fontWeight: 700,
               fontFamily: 'var(--font-display)',
               color: 'var(--text-main)',
-              marginBottom: '2px'
+              marginBottom: '3px',
+              wordBreak: 'break-word'
             }}>
               {file.filename}
             </h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
               <span>{file.formatted_size}</span>
               <span>•</span>
               <span><strong style={{ color: 'var(--text-main)' }}>{file.page_count}</strong> Pages</span>
@@ -138,15 +142,15 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           </div>
         </div>
 
-        <div>
+        <div style={{ flexShrink: 0 }}>
           {getStatusBadge()}
         </div>
       </div>
 
       {/* Progress Bar (when processing or finished) */}
       {(file.status === 'PROCESSING' || file.progress > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             <span>
               {file.status === 'PROCESSING' 
                 ? `Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`
@@ -168,11 +172,11 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
       {/* Error Message if any */}
       {file.error_message && (
         <div style={{
-          padding: '8px 12px',
+          padding: '10px 14px',
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '8px',
-          fontSize: '0.82rem',
+          borderRadius: '10px',
+          fontSize: '0.84rem',
           color: '#f87171'
         }}>
           {file.error_message}
@@ -184,18 +188,18 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingTop: '8px',
+        paddingTop: '10px',
         borderTop: '1px solid var(--border-subtle)',
         flexWrap: 'wrap',
-        gap: '10px'
+        gap: '12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {isProcessed && (
             <>
               <button
                 onClick={() => onPreview(file)}
                 className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                style={{ fontSize: '0.82rem', padding: '6px 16px' }}
                 title="View interactive before & after visual comparison"
               >
                 <Eye size={15} color="#38bdf8" /> Before / After Preview
@@ -204,7 +208,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
               <button
                 onClick={() => onViewReport(file)}
                 className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                style={{ fontSize: '0.82rem', padding: '6px 16px' }}
                 title="View QA validation certificate"
               >
                 <ShieldCheck size={15} color="#10b981" /> QA Certificate
@@ -213,12 +217,12 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {file.status === 'READY' && (
             <button
               onClick={() => onProcess(file.id)}
               className="btn btn-primary"
-              style={{ fontSize: '0.85rem', padding: '7px 16px' }}
+              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
               <Play size={15} /> Remove Disclaimer
             </button>
@@ -228,7 +232,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
             <button
               onClick={() => onDownload(file.id, file.processed_filename)}
               className="btn btn-action"
-              style={{ fontSize: '0.85rem', padding: '7px 16px' }}
+              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
               <Download size={15} /> Download Cleaned PDF
             </button>
@@ -238,3 +242,5 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
     </div>
   );
 };
+
+export default FileItemCard;
