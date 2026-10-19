@@ -352,13 +352,13 @@ export const App: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{
-              fontSize: '1.15rem',
+              fontSize: '1.2rem',
               fontWeight: 800,
               letterSpacing: '-0.02em',
               fontFamily: 'var(--font-display)',
               color: '#ffffff'
             }}>
-              PDF Disclaimer Cleaner
+              Doclear
             </span>
             <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
               AI-Powered • 100% Vector Preservation
@@ -436,7 +436,7 @@ export const App: React.FC = () => {
               color: '#ffffff',
               marginBottom: '16px'
             }}>
-              PDF Disclaimer Cleaner
+              Doclear
             </h1>
 
             <p style={{

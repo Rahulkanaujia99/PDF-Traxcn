@@ -58,7 +58,7 @@ export const ValidationReportModal: React.FC<ValidationReportModalProps> = ({
 
   const copyAuditLog = () => {
     const reportText = `
-PDF DISCLAIMER CLEANER - QA AUDIT CERTIFICATE
+DOCLEAR - QA AUDIT CERTIFICATE
 Document: ${filename}
 File ID: ${fileId}
 Pages Scanned: ${pagesScanned} of ${totalPages}
