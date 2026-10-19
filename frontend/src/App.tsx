@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   UploadCloud, Play, Download, Trash2, ShieldCheck, 
   Sparkles, AlertCircle, Info, X,
-  FileText, CheckCircle2, ArrowRight, Loader2, FileCheck
+  FileText, CheckCircle2, FileCheck, Clock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { FileItemCard } from './components/FileItemCard';
 import type { FileRecord } from './components/FileItemCard';
 import { ValidationReportModal } from './components/ValidationReportModal';
 import { ConduitBackground } from './components/ConduitBackground';
+import { LottieLoader } from './components/LottieLoader';
 import { API_BASE } from './config';
 
 type PageType = 'home' | 'process' | 'documents';
@@ -26,8 +27,17 @@ export const App: React.FC = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [activeReportFile, setActiveReportFile] = useState<FileRecord | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Live timer for header current time & date
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sync hash routing
   useEffect(() => {
@@ -287,6 +297,15 @@ export const App: React.FC = () => {
   const readyFilesCount = files.filter(f => f.status === 'READY').length;
   const convertedFiles = files.filter(f => ['SUCCESS', 'NO_MATCH', 'NEEDS_REVIEW'].includes(f.status));
 
+  // Modern formatted date and time
+  const formattedDate = `${currentDateTime.toLocaleDateString('en-US', { weekday: 'short' })}, ${currentDateTime.getDate()} ${currentDateTime.toLocaleDateString('en-US', { month: 'short' })} ${currentDateTime.getFullYear()}`;
+  const formattedTime = currentDateTime.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
       
@@ -393,17 +412,18 @@ export const App: React.FC = () => {
           </button>
         </nav>
 
-        {/* Right Action Button */}
+        {/* Right Action: Modern Live Date & Time Display */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={handleGenerateSample}
-            className="btn btn-primary"
-            disabled={isUploading}
-            title="Load sample financial statement with Tracxn disclaimer header"
-            style={{ fontSize: '0.85rem', padding: '8px 20px' }}
-          >
-            <Sparkles size={15} /> Load Sample Financial Report
-          </button>
+          <div className="header-datetime-pill" title="Live System Time">
+            <div className="datetime-pulse-indicator">
+              <span className="datetime-ping" />
+              <span className="datetime-dot" />
+            </div>
+            <Clock size={13} className="datetime-icon" />
+            <span className="datetime-date">{formattedDate}</span>
+            <span className="datetime-divider">•</span>
+            <span className="datetime-time">{formattedTime}</span>
+          </div>
         </div>
       </header>
 
@@ -444,28 +464,10 @@ export const App: React.FC = () => {
               color: 'var(--text-muted)',
               lineHeight: 1.6,
               maxWidth: '680px',
-              margin: '0 auto 24px auto'
+              margin: '0 auto'
             }}>
               Remove unwanted PDF disclaimers while preserving your original financial reports.
             </p>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="btn btn-primary"
-                style={{ padding: '12px 28px', fontSize: '0.95rem' }}
-              >
-                Browse Files <ArrowRight size={16} />
-              </button>
-              <button
-                onClick={handleGenerateSample}
-                className="btn btn-secondary"
-                disabled={isUploading}
-                style={{ padding: '12px 26px', fontSize: '0.95rem' }}
-              >
-                <Sparkles size={16} color="#7094ff" /> Try Instant Demo
-              </button>
-            </div>
           </div>
 
           {/* Central File Upload Panel (Wordzen AI Prompt Box Style) */}
@@ -543,28 +545,25 @@ export const App: React.FC = () => {
                     Drag and drop single or multiple financial reports, or click to browse files
                   </p>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <button
                       type="button"
                       className="btn btn-primary"
-                      style={{ padding: '9px 24px', fontSize: '0.88rem' }}
+                      style={{ 
+                        padding: '11px 32px', 
+                        fontSize: '0.94rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 20px rgba(49, 92, 255, 0.4)'
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         fileInputRef.current?.click();
                       }}
                     >
-                      Browse Files
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: '9px 22px', fontSize: '0.88rem' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleGenerateSample();
-                      }}
-                    >
-                      <Sparkles size={15} color="#7094ff" /> Try Instant Demo
+                      <UploadCloud size={18} /> Import Files
                     </button>
                   </div>
                 </div>
@@ -680,27 +679,22 @@ export const App: React.FC = () => {
                       Browse Files
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleUploadFiles(stagedFiles)}
-                      disabled={isUploading}
-                      className="btn btn-primary"
-                      style={{
-                        fontSize: '0.92rem',
-                        padding: '10px 28px',
-                        boxShadow: '0 4px 20px rgba(49, 92, 255, 0.5)'
-                      }}
-                    >
-                      {isUploading ? (
-                        <>
-                          <Loader2 size={16} className="spin-slow" /> Uploading Financial Statement PDFs...
-                        </>
-                      ) : (
-                        <>
-                          <UploadCloud size={16} /> Upload Financial Statement PDFs
-                        </>
-                      )}
-                    </button>
+                    {isUploading ? (
+                      <LottieLoader statusText="Uploading Document..." size={84} />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUploadFiles(stagedFiles)}
+                        className="btn btn-primary"
+                        style={{
+                          fontSize: '0.92rem',
+                          padding: '10px 28px',
+                          boxShadow: '0 4px 20px rgba(49, 92, 255, 0.5)'
+                        }}
+                      >
+                        <UploadCloud size={16} /> Upload Document
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -709,10 +703,15 @@ export const App: React.FC = () => {
             {/* Prompt Bottom Bar: Active Redaction Rule */}
             <div className="prompt-bottom-bar">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.78rem', color: '#9cb3ff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Active Redaction Rule:
                 </span>
-                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '0.7rem' }}>
+                <span className="badge" style={{ 
+                  background: 'rgba(6, 182, 212, 0.15)', 
+                  color: '#38bdf8', 
+                  border: '1px solid rgba(56, 189, 248, 0.35)', 
+                  fontSize: '0.7rem' 
+                }}>
                   Exact Match Only
                 </span>
               </div>
@@ -720,11 +719,13 @@ export const App: React.FC = () => {
               <p style={{
                 fontSize: '0.82rem',
                 fontFamily: 'var(--font-mono)',
-                color: '#f87171',
-                background: 'rgba(0, 0, 0, 0.4)',
-                padding: '4px 10px',
+                color: '#38bdf8',
+                background: 'rgba(6, 182, 212, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.22)',
+                padding: '5px 12px',
                 borderRadius: '6px',
-                wordBreak: 'break-word'
+                wordBreak: 'break-word',
+                boxShadow: '0 0 14px rgba(6, 182, 212, 0.08)'
               }}>
                 "Disclaimer: The file has been converted by Tracxn to improve readabilty of financial data"
               </p>

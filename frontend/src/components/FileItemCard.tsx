@@ -3,6 +3,7 @@ import {
   FileText, CheckCircle2, AlertTriangle, AlertCircle, 
   Download, ShieldCheck, Play, Loader2, Sparkles 
 } from 'lucide-react';
+import { InfinityLoopLoader } from './InfinityLoopLoader';
 
 export interface FileRecord {
   id: string;
@@ -145,24 +146,25 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         </div>
       </div>
 
-      {/* Progress Bar (when processing or finished) */}
-      {(file.status === 'PROCESSING' || file.progress > 0) && (
+      {/* Glowing Infinity-Loop Animation (Image 3 & Reference 2) when processing */}
+      {file.status === 'PROCESSING' ? (
+        <InfinityLoopLoader
+          statusText={`Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`}
+          progress={file.progress}
+        />
+      ) : file.progress > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             <span>
-              {file.status === 'PROCESSING' 
-                ? `Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`
-                : file.status === 'SUCCESS' 
-                  ? `Completed: ${file.disclaimers_removed} disclaimers scrubbed from ${file.page_count} pages`
-                  : `Scan complete (${file.page_count} pages inspected)`
+              {file.status === 'SUCCESS' 
+                ? `Completed: ${file.disclaimers_removed} disclaimers scrubbed from ${file.page_count} pages`
+                : `Scan complete (${file.page_count} pages inspected)`
               }
             </span>
             <span style={{ fontFamily: 'var(--font-mono)' }}>{file.progress}%</span>
           </div>
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${file.progress}%` }}>
-              {file.status === 'PROCESSING' && <div className="progress-shimmer" />}
-            </div>
+            <div className="progress-fill" style={{ width: `${file.progress}%` }} />
           </div>
         </div>
       )}
