@@ -8,6 +8,7 @@ import zipfile
 import base64
 import shutil
 import asyncio
+import threading
 from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -79,9 +80,50 @@ def cleanup_old_files():
                 pass
 
 
+def _bg_upload_raw_to_supabase(file_id: str, safe_filename: str, content: bytes, record: Dict[str, Any]):
+    if not supabase_service.is_enabled:
+        return
+    try:
+        raw_storage_path = f"{file_id}/{safe_filename}"
+        supabase_service.upload_pdf_bytes("raw-pdfs", raw_storage_path, content)
+        supabase_service.upsert_file_record(record)
+    except Exception as e:
+        print(f"[Supabase] Background raw upload error for {file_id}: {e}")
+
+
+def _bg_sync_completed_to_supabase(file_id: str, output_path: str, output_filename: str, record: Dict[str, Any]):
+    if not supabase_service.is_enabled:
+        return
+    try:
+        cleaned_storage_path = None
+        if os.path.exists(output_path):
+            with open(output_path, "rb") as f:
+                cleaned_bytes = f.read()
+            cleaned_storage_path = f"{file_id}/{output_filename}"
+            supabase_service.upload_pdf_bytes("cleaned-pdfs", cleaned_storage_path, cleaned_bytes)
+            record["cleaned_storage_path"] = cleaned_storage_path
+            if file_id in files_db:
+                files_db[file_id]["cleaned_storage_path"] = cleaned_storage_path
+        supabase_service.upsert_file_record(record)
+    except Exception as e:
+        print(f"[Supabase] Background completion sync error for {file_id}: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     cleanup_old_files()
+    if supabase_service.is_enabled:
+        def _hydrate():
+            try:
+                db_records = supabase_service.list_all_files()
+                if db_records:
+                    for item in db_records:
+                        fid = str(item["id"])
+                        if fid not in files_db:
+                            files_db[fid] = item
+            except Exception as e:
+                print(f"[Supabase] Startup hydration error: {e}")
+        threading.Thread(target=_hydrate, daemon=True).start()
 
 
 @app.get("/")
@@ -98,6 +140,7 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
     """
     Accepts one or multiple PDF uploads.
     Validates PDF format and encryption, extracts metadata.
+    Returns immediately without blocking on external networks.
     """
     cleanup_old_files()
     uploaded_records = []
@@ -137,10 +180,7 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
                 content={"error": f"Failed to parse '{safe_filename}'. Document may be corrupted."}
             )
 
-        raw_storage_path = None
-        if supabase_service.is_enabled:
-            raw_storage_path = f"{file_id}/{safe_filename}"
-            supabase_service.upload_pdf_bytes("raw-pdfs", raw_storage_path, content)
+        raw_storage_path = f"{file_id}/{safe_filename}" if supabase_service.is_enabled else None
 
         record = {
             "id": file_id,
@@ -166,9 +206,14 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             "created_at": time.time()
         }
         files_db[file_id] = record
-        if supabase_service.is_enabled:
-            supabase_service.upsert_file_record(record)
         uploaded_records.append(record)
+
+        if supabase_service.is_enabled:
+            threading.Thread(
+                target=_bg_upload_raw_to_supabase,
+                args=(file_id, safe_filename, content, record.copy()),
+                daemon=True
+            ).start()
 
     return {"files": uploaded_records}
 
@@ -190,13 +235,7 @@ def generate_sample_report():
     page_count = len(doc)
     doc.close()
 
-    raw_storage_path = None
-    if supabase_service.is_enabled:
-        with open(upload_path, "rb") as f:
-            sample_bytes = f.read()
-        raw_storage_path = f"{file_id}/{filename}"
-        supabase_service.upload_pdf_bytes("raw-pdfs", raw_storage_path, sample_bytes)
-
+    raw_storage_path = f"{file_id}/{filename}" if supabase_service.is_enabled else None
     record = {
         "id": file_id,
         "filename": filename,
@@ -221,8 +260,16 @@ def generate_sample_report():
         "created_at": time.time()
     }
     files_db[file_id] = record
+
     if supabase_service.is_enabled:
-        supabase_service.upsert_file_record(record)
+        with open(upload_path, "rb") as f:
+            sample_bytes = f.read()
+        threading.Thread(
+            target=_bg_upload_raw_to_supabase,
+            args=(file_id, filename, sample_bytes, record.copy()),
+            daemon=True
+        ).start()
+
     return {"file": record}
 
 
@@ -234,36 +281,38 @@ def execute_pdf_processing(file_id: str):
 
     record["status"] = "PROCESSING"
     record["progress"] = 5
-    if supabase_service.is_enabled:
-        supabase_service.update_file_record(file_id, {"status": "PROCESSING", "progress": 5})
+    record["pages_scanned"] = 0
+    record["error_message"] = None
 
     try:
-        input_path = record["upload_path"]
-        output_filename = record["processed_filename"]
+        input_path = record.get("upload_path")
+        # If upload_path not present or file not found on disk, try restoring from Supabase storage
+        if not input_path or not os.path.exists(input_path):
+            raw_path = record.get("raw_storage_path")
+            if raw_path and supabase_service.is_enabled:
+                input_path = os.path.join(UPLOAD_DIR, f"{file_id}_{record['filename']}")
+                data = supabase_service.download_pdf_bytes("raw-pdfs", raw_path)
+                if data:
+                    with open(input_path, "wb") as f:
+                        f.write(data)
+                    record["upload_path"] = input_path
+
+        if not input_path or not os.path.exists(input_path):
+            raise FileNotFoundError(f"Source file '{record.get('filename')}' was not found on local disk or cloud storage.")
+
+        output_filename = record.get("processed_filename") or (record["filename"].rsplit(".", 1)[0] + "_cleaned.pdf")
+        record["processed_filename"] = output_filename
         output_path = os.path.join(PROCESSED_DIR, f"{file_id}_{output_filename}")
 
         def on_progress(current, total):
-            pct = int((current / total) * 85) + 10
-            record["progress"] = pct
+            # Scale progress across 10% to 92%
+            pct = int((current / total) * 82) + 10
+            record["progress"] = min(92, pct)
             record["pages_scanned"] = current
-            if supabase_service.is_enabled:
-                supabase_service.update_file_record(file_id, {
-                    "progress": pct,
-                    "pages_scanned": current,
-                    "status": "PROCESSING"
-                })
 
         result = processor.process_pdf(input_path, output_path, progress_callback=on_progress)
 
-        cleaned_storage_path = None
-        if supabase_service.is_enabled and os.path.exists(output_path):
-            with open(output_path, "rb") as f:
-                cleaned_bytes = f.read()
-            cleaned_storage_path = f"{file_id}/{output_filename}"
-            supabase_service.upload_pdf_bytes("cleaned-pdfs", cleaned_storage_path, cleaned_bytes)
-
         record["processed_path"] = output_path
-        record["cleaned_storage_path"] = cleaned_storage_path
         record["status"] = result["status"]
         record["progress"] = 100
         record["pages_scanned"] = result["pages_scanned"]
@@ -275,56 +324,77 @@ def execute_pdf_processing(file_id: str):
         record["page_details"] = result["page_details"]
 
         if supabase_service.is_enabled:
-            supabase_service.upsert_file_record(record)
+            threading.Thread(
+                target=_bg_sync_completed_to_supabase,
+                args=(file_id, output_path, output_filename, record.copy()),
+                daemon=True
+            ).start()
 
     except Exception as e:
         record["status"] = "FAILED"
         record["progress"] = 100
         record["error_message"] = f"Processing error: {str(e)}"
         if supabase_service.is_enabled:
-            supabase_service.update_file_record(file_id, {
-                "status": "FAILED",
-                "progress": 100,
-                "error_message": record["error_message"]
-            })
+            err_msg = record["error_message"]
+            threading.Thread(
+                target=lambda: supabase_service.update_file_record(file_id, {
+                    "status": "FAILED",
+                    "progress": 100,
+                    "error_message": err_msg
+                }),
+                daemon=True
+            ).start()
 
 
 @app.post("/api/process/{file_id}")
 async def process_file(file_id: str, background_tasks: BackgroundTasks):
-    """Processes a single uploaded PDF."""
+    """Processes a single uploaded PDF asynchronously."""
     if file_id not in files_db:
         raise HTTPException(status_code=404, detail="File not found")
     
+    # Mark as PROCESSING immediately so UI reflects it on next instant poll
+    files_db[file_id]["status"] = "PROCESSING"
+    files_db[file_id]["progress"] = 5
+    files_db[file_id]["error_message"] = None
     background_tasks.add_task(execute_pdf_processing, file_id)
     return {"message": "Processing started", "file_id": file_id}
 
 
 @app.post("/api/process-all")
 async def process_all_files(background_tasks: BackgroundTasks):
-    """Batch processes all uploaded PDFs."""
+    """Batch processes all uploaded PDFs asynchronously."""
     started_ids = []
     for file_id, record in files_db.items():
         if record["status"] in ("READY", "FAILED"):
+            record["status"] = "PROCESSING"
+            record["progress"] = 5
+            record["error_message"] = None
             background_tasks.add_task(execute_pdf_processing, file_id)
             started_ids.append(file_id)
     
     return {"message": "Batch processing initiated", "files_count": len(started_ids), "file_ids": started_ids}
 
 
+def _parse_created_timestamp(val: Any) -> float:
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        try:
+            from datetime import datetime
+            return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            try:
+                return float(val)
+            except Exception:
+                return 0.0
+    return 0.0
+
+
 @app.get("/api/files")
 def list_files():
-    """Returns list of all files with current state, merging with Supabase if active."""
-    if supabase_service.is_enabled:
-        db_records = supabase_service.list_all_files()
-        if db_records is not None:
-            for item in db_records:
-                fid = str(item["id"])
-                if fid not in files_db:
-                    files_db[fid] = item
-                else:
-                    files_db[fid].update(item)
+    """Returns list of all files with current state directly from memory (blazing fast)."""
     records = list(files_db.values())
-    records.sort(key=lambda r: r.get("created_at", 0), reverse=True)
+    records.sort(key=lambda r: _parse_created_timestamp(r.get("created_at")), reverse=True)
     return {"files": records}
 
 
@@ -364,10 +434,31 @@ def get_page_preview(file_id: str, page_num: int):
         raise HTTPException(status_code=404, detail="File not found")
     
     record = files_db[file_id]
-    orig_path = record["upload_path"]
+    orig_path = record.get("upload_path")
+    if not orig_path or not os.path.exists(orig_path):
+        raw_p = record.get("raw_storage_path")
+        if raw_p and supabase_service.is_enabled:
+            orig_path = os.path.join(UPLOAD_DIR, f"{file_id}_{record['filename']}")
+            d = supabase_service.download_pdf_bytes("raw-pdfs", raw_p)
+            if d:
+                with open(orig_path, "wb") as f:
+                    f.write(d)
+                record["upload_path"] = orig_path
+
     proc_path = record.get("processed_path")
+    if (not proc_path or not os.path.exists(proc_path)) and record.get("cleaned_storage_path") and supabase_service.is_enabled:
+        out_fn = record.get("processed_filename") or (record["filename"].rsplit(".", 1)[0] + "_cleaned.pdf")
+        proc_path = os.path.join(PROCESSED_DIR, f"{file_id}_{out_fn}")
+        d = supabase_service.download_pdf_bytes("cleaned-pdfs", record["cleaned_storage_path"])
+        if d:
+            with open(proc_path, "wb") as f:
+                f.write(d)
+            record["processed_path"] = proc_path
 
     try:
+        if not orig_path or not os.path.exists(orig_path):
+            raise HTTPException(status_code=404, detail="Original document file not found.")
+
         # Original page image
         orig_img_bytes = processor.render_page_preview(orig_path, page_num, dpi=130)
         orig_b64 = "data:image/png;base64," + base64.b64encode(orig_img_bytes).decode("ascii")
@@ -393,6 +484,8 @@ def get_page_preview(file_id: str, page_num: int):
             "processed_image": proc_b64,
             "page_detail": page_detail
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate page preview: {str(e)}")
 
@@ -405,6 +498,15 @@ def download_cleaned_pdf(file_id: str):
     
     record = files_db[file_id]
     proc_path = record.get("processed_path")
+    if (not proc_path or not os.path.exists(proc_path)) and record.get("cleaned_storage_path") and supabase_service.is_enabled:
+        out_fn = record.get("processed_filename") or (record["filename"].rsplit(".", 1)[0] + "_cleaned.pdf")
+        proc_path = os.path.join(PROCESSED_DIR, f"{file_id}_{out_fn}")
+        d = supabase_service.download_pdf_bytes("cleaned-pdfs", record["cleaned_storage_path"])
+        if d:
+            with open(proc_path, "wb") as f:
+                f.write(d)
+            record["processed_path"] = proc_path
+
     if not proc_path or not os.path.exists(proc_path):
         raise HTTPException(status_code=400, detail="Processed file not available.")
     

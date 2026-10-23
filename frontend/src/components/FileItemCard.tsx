@@ -39,6 +39,21 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
   onViewReport,
   onDownload
 }) => {
+  const [isStarting, setIsStarting] = React.useState(false);
+
+  const handleRemoveDisclaimer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isStarting || file.status === 'PROCESSING') return;
+    setIsStarting(true);
+    onProcess(file.id);
+  };
+
+  React.useEffect(() => {
+    if (file.status === 'PROCESSING') {
+      setIsStarting(false);
+    }
+  }, [file.status]);
+
   const getStatusBadge = () => {
     switch (file.status) {
       case 'SUCCESS':
@@ -151,8 +166,9 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         <ThemeLiquidLoader
           statusText={`Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`}
           subText={`${file.progress}% Completed`}
+          progress={file.progress}
           width="100%"
-          height={48}
+          height={52}
         />
       ) : file.progress > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -211,11 +227,20 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {file.status === 'READY' && (
             <button
-              onClick={() => onProcess(file.id)}
+              onClick={handleRemoveDisclaimer}
+              disabled={isStarting}
               className="btn btn-primary"
-              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+              style={{ fontSize: '0.85rem', padding: '8px 20px', minWidth: '170px' }}
             >
-              <Play size={15} /> Remove Disclaimer
+              {isStarting ? (
+                <>
+                  <Loader2 size={15} className="spin-slow" /> Starting...
+                </>
+              ) : (
+                <>
+                  <Play size={15} /> Remove Disclaimer
+                </>
+              )}
             </button>
           )}
 

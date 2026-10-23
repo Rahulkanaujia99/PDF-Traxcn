@@ -1,6 +1,6 @@
 import os
 import re
-import difflib
+from collections import Counter
 import pymupdf  # PyMuPDF 1.28.2
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -45,6 +45,11 @@ class PDFProcessor:
         Uses coordinate-level text inspection and sequence matching.
         Returns list of match dicts: { bbox, matched_text, confidence, method, needs_review, review_reason }
         """
+        # Fast pre-filter: if 'tracxn' is not in this page's text stream, return early
+        page_text = page.get_text("text")
+        if "tracxn" not in page_text.lower():
+            return []
+
         matches = []
         page_rect = page.rect
         
@@ -95,49 +100,60 @@ class PDFProcessor:
             norm_words = [normalize_word(w[4]) for w in words]
             n_words = len(norm_words)
 
-            target_variants = [
-                TARGET_ALTERNATIVE_TOKENS,
-                TARGET_NORMALIZED_TOKENS,
-                TARGET_WITHOUT_DISCLAIMER_TOKENS
-            ]
+            # Fast index lookup: only check windows that cover the token "tracxn"
+            tracxn_indices = [idx for idx, nw in enumerate(norm_words) if nw == "tracxn"]
 
-            for target in target_variants:
-                k = len(target)
-                for i in range(max(0, n_words - k + 1)):
-                    window = norm_words[i : i + k]
-                    
-                    # Calculate token match ratio
-                    match_count = sum(1 for a, b in zip(window, target) if a == b)
-                    ratio = match_count / k
+            if tracxn_indices:
+                target_variants = [
+                    TARGET_ALTERNATIVE_TOKENS,
+                    TARGET_NORMALIZED_TOKENS,
+                    TARGET_WITHOUT_DISCLAIMER_TOKENS
+                ]
 
-                    # Must have "tracxn" and ("converted" or "disclaimer") to be relevant
-                    has_tracxn = "tracxn" in window
-                    has_converted = "converted" in window or "disclaimer" in window
+                for target in target_variants:
+                    k = len(target)
+                    checked_starts = set()
+                    for t_idx in tracxn_indices:
+                        start_min = max(0, t_idx - k + 1)
+                        start_max = min(n_words - k + 1, t_idx + 1)
+                        for i in range(start_min, start_max):
+                            if i in checked_starts:
+                                continue
+                            checked_starts.add(i)
+                            window = norm_words[i : i + k]
+                            
+                            # Calculate token match ratio
+                            match_count = sum(1 for a, b in zip(window, target) if a == b)
+                            ratio = match_count / k
 
-                    if has_tracxn and has_converted and ratio >= 0.85:
-                        matched_tuples = words[i : i + k]
-                        x0 = min(w[0] for w in matched_tuples)
-                        y0 = min(w[1] for w in matched_tuples)
-                        x1 = max(w[2] for w in matched_tuples)
-                        y1 = max(w[3] for w in matched_tuples)
+                            # Must have "tracxn" and ("converted" or "disclaimer") to be relevant
+                            has_tracxn = "tracxn" in window
+                            has_converted = "converted" in window or "disclaimer" in window
 
-                        padded_rect = pymupdf.Rect(
-                            max(0, x0 - 2),
-                            max(0, y0 - 2),
-                            min(page_rect.width, x1 + 2),
-                            min(page_rect.height, y1 + 2)
-                        )
-                        raw_text = " ".join(w[4] for w in matched_tuples)
+                            if has_tracxn and has_converted and ratio >= 0.85:
+                                matched_tuples = words[i : i + k]
+                                x0 = min(w[0] for w in matched_tuples)
+                                y0 = min(w[1] for w in matched_tuples)
+                                x1 = max(w[2] for w in matched_tuples)
+                                y1 = max(w[3] for w in matched_tuples)
 
-                        is_exact = (ratio == 1.0)
-                        matches.append({
-                            "bbox": [padded_rect.x0, padded_rect.y0, padded_rect.x1, padded_rect.y1],
-                            "matched_text": raw_text,
-                            "confidence": round(ratio, 3),
-                            "method": "token_sequence_window",
-                            "needs_review": not is_exact,
-                            "review_reason": "Slight token variation detected" if not is_exact else ""
-                        })
+                                padded_rect = pymupdf.Rect(
+                                    max(0, x0 - 2),
+                                    max(0, y0 - 2),
+                                    min(page_rect.width, x1 + 2),
+                                    min(page_rect.height, y1 + 2)
+                                )
+                                raw_text = " ".join(w[4] for w in matched_tuples)
+
+                                is_exact = (ratio == 1.0)
+                                matches.append({
+                                    "bbox": [padded_rect.x0, padded_rect.y0, padded_rect.x1, padded_rect.y1],
+                                    "matched_text": raw_text,
+                                    "confidence": round(ratio, 3),
+                                    "method": "token_sequence_window",
+                                    "needs_review": not is_exact,
+                                    "review_reason": "Slight token variation detected" if not is_exact else ""
+                                })
 
         # Method 3: Regex match on page text blocks
         if not matches:
@@ -218,11 +234,6 @@ class PDFProcessor:
         disclaimers_removed_count = 0
         needs_review_count = 0
 
-        # Snapshot text before redaction for rigorous validation
-        orig_page_texts = []
-        for i in range(total_pages):
-            orig_page_texts.append(orig_doc[i].get_text("text"))
-
         # We will work on the document directly or a copy
         for page_num in range(total_pages):
             page = orig_doc[page_num]
@@ -269,8 +280,8 @@ class PDFProcessor:
                 progress_callback(page_num + 1, total_pages)
 
         # Save processed PDF
-        # garbage=4: removes unused streams, deflate=True: compress streams without quality loss
-        orig_doc.save(output_path, garbage=4, deflate=True)
+        # garbage=3: removes unused and orphaned streams without quadratic deduplication overhead
+        orig_doc.save(output_path, garbage=3, deflate=True)
         orig_doc.close()
 
         # QA Validation: Re-open saved PDF and run thorough integrity check
@@ -338,19 +349,39 @@ class PDFProcessor:
                 is_valid = False
 
             # Check 3: Text Diff
-            # Extract words from both pages
+            # If this page had no disclaimer removed, check equality directly
+            page_rpt = page_reports[p_idx] if p_idx < len(page_reports) else None
+            is_page_removed = page_rpt.get("removed", False) if page_rpt else False
+
+            if not is_page_removed:
+                text_orig = p_orig.get_text("text")
+                text_proc = p_proc.get_text("text")
+                if text_orig != text_proc:
+                    issues.append(f"Page {p_idx + 1}: Unaltered page content changed unexpectedly.")
+                    is_valid = False
+                continue
+
+            # Modified page: perform fast word-level verification
             words_orig = [normalize_word(w[4]) for w in p_orig.get_text("words")]
             words_proc = [normalize_word(w[4]) for w in p_proc.get_text("words")]
 
-            # Use SequenceMatcher or Counter to find deleted tokens
-            matcher = difflib.SequenceMatcher(None, words_orig, words_proc)
+            if words_orig == words_proc:
+                continue
+
+            c_orig = Counter(words_orig)
+            c_proc = Counter(words_proc)
+
             deleted_tokens = []
+            for word, count in c_orig.items():
+                diff = count - c_proc.get(word, 0)
+                if diff > 0:
+                    deleted_tokens.extend([word] * diff)
+
             added_tokens = []
-            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-                if tag in ('delete', 'replace'):
-                    deleted_tokens.extend(words_orig[i1:i2])
-                if tag in ('insert', 'replace'):
-                    added_tokens.extend(words_proc[j1:j2])
+            for word, count in c_proc.items():
+                diff = count - c_orig.get(word, 0)
+                if diff > 0:
+                    added_tokens.extend([word] * diff)
 
             # Check if any deleted token is NOT part of the allowed disclaimer vocabulary
             suspicious_deletions = [tok for tok in deleted_tokens if tok and tok not in ALLOWED_REMOVED_WORDS]

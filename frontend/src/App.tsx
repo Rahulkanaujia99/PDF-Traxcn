@@ -9,7 +9,8 @@ import { FileItemCard } from './components/FileItemCard';
 import type { FileRecord } from './components/FileItemCard';
 import { ValidationReportModal } from './components/ValidationReportModal';
 import { ConduitBackground } from './components/ConduitBackground';
-import { ThemeLiquidLoader } from './components/ThemeLiquidLoader';
+import { AnimatedUploadButton } from './components/AnimatedUploadButton';
+import type { ButtonUploadState } from './components/AnimatedUploadButton';
 import { API_BASE } from './config';
 
 type PageType = 'home' | 'process' | 'documents';
@@ -25,6 +26,8 @@ export const App: React.FC = () => {
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadButtonState, setUploadButtonState] = useState<ButtonUploadState>('idle');
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [activeReportFile, setActiveReportFile] = useState<FileRecord | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
@@ -57,37 +60,48 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Poll active processing tasks
-  useEffect(() => {
-    const processingFiles = files.filter(f => f.status === 'PROCESSING');
-    if (processingFiles.length === 0) return;
+  // Stable poll for active processing tasks
+  const isAnyProcessing = files.some(f => f.status === 'PROCESSING');
+  const prevProcessingCountRef = useRef(0);
 
-    const interval = setInterval(async () => {
+  useEffect(() => {
+    if (!isAnyProcessing) return;
+
+    let isMounted = true;
+    const pollActive = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/files`);
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const data = await res.json();
-          const prevProcessing = files.filter(f => f.status === 'PROCESSING').length;
-          const currProcessing = data.files.filter((f: any) => f.status === 'PROCESSING').length;
-          
-          setFiles(data.files);
+          const currProcessing = (data.files || []).filter((f: any) => f.status === 'PROCESSING').length;
 
           // If all just finished, fire celebratory confetti
-          if (prevProcessing > 0 && currProcessing === 0) {
+          if (prevProcessingCountRef.current > 0 && currProcessing === 0) {
             confetti({
               particleCount: 50,
               spread: 60,
               origin: { y: 0.6 }
             });
           }
+          prevProcessingCountRef.current = currProcessing;
+
+          setFiles(data.files);
         }
       } catch (err) {
         console.error('Status poll error:', err);
       }
-    }, 1000);
+    };
 
-    return () => clearInterval(interval);
-  }, [files]);
+    // Quick initial poll at 200ms, then recurring every 750ms
+    const timer = setTimeout(pollActive, 200);
+    const interval = setInterval(pollActive, 750);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [isAnyProcessing]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -106,8 +120,8 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleStageFiles = (fileList: FileList | File[]) => {
-    if (!fileList || fileList.length === 0) return;
+  const handleStageFiles = (fileList: FileList | File[]): File[] => {
+    if (!fileList || fileList.length === 0) return [];
     setErrorToast(null);
 
     const validPdfs: File[] = [];
@@ -124,15 +138,18 @@ export const App: React.FC = () => {
 
     if (hasInvalid && validPdfs.length === 0) {
       setErrorToast('Please select valid PDF documents (.pdf)');
-      return;
+      return [];
     }
 
     setStagedFiles(validPdfs);
+    return validPdfs;
   };
 
   const handleUploadFiles = async (filesToUpload: File[]) => {
-    if (!filesToUpload || filesToUpload.length === 0) return;
+    if (!filesToUpload || filesToUpload.length === 0 || isUploading) return;
     setIsUploading(true);
+    setUploadButtonState('loading');
+    setUploadProgress(15);
     setErrorToast(null);
 
     const formData = new FormData();
@@ -141,33 +158,67 @@ export const App: React.FC = () => {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/upload`, {
-        method: 'POST',
-        body: formData
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/api/upload`);
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const pct = Math.round((event.loaded / event.total) * 85);
+            setUploadProgress(Math.max(15, pct));
+          }
+        };
+
+        xhr.onload = () => {
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadProgress(100);
+              resolve();
+            } else {
+              reject(new Error(json.error || json.detail || 'Failed to upload files.'));
+            }
+          } catch {
+            reject(new Error('Invalid response from server.'));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error('Network error during upload. Please ensure backend is running.'));
+        };
+
+        xhr.send(formData);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to upload files.');
-      }
-      
+
       // Clear staged files and fetch updated files from backend
       setStagedFiles([]);
       await fetchFiles();
 
+      // Dribbble Success state transition (spring pop checkmark)
+      setUploadButtonState('success');
+
       // Fire celebratory confetti on successful upload
       confetti({
-        particleCount: 40,
-        spread: 50,
+        particleCount: 45,
+        spread: 60,
         origin: { y: 0.6 }
       });
 
-      // Automatically navigate to Process page as specified in Requirement 6
-      navigateTo('process');
+      // Automatically navigate to Process page after brief checkmark display
+      setTimeout(() => {
+        setUploadButtonState('idle');
+        setIsUploading(false);
+        navigateTo('process');
+      }, 750);
 
     } catch (err: any) {
+      setUploadButtonState('error');
       setErrorToast(err.message || 'Error uploading files');
+      setTimeout(() => {
+        setUploadButtonState('idle');
+        setIsUploading(false);
+      }, 2000);
     } finally {
-      setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -197,22 +248,51 @@ export const App: React.FC = () => {
   };
 
   const handleProcessSingle = async (fileId: string) => {
+    // 1. Immediately update UI state so button transitions to PROCESSING and loader starts with 0ms delay
+    setFiles(prev => prev.map(f => f.id === fileId ? { 
+      ...f, 
+      status: 'PROCESSING', 
+      progress: 5,
+      pages_scanned: 0,
+      error_message: null 
+    } : f));
+
     try {
       const res = await fetch(`${API_BASE}/api/process/${fileId}`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to initiate processing');
-      // Optimistically update file state
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'PROCESSING', progress: 10 } : f));
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || errJson.error || 'Failed to initiate processing');
+      }
     } catch (err: any) {
+      // Rollback to READY on failure and show error toast
+      setFiles(prev => prev.map(f => f.id === fileId ? { 
+        ...f, 
+        status: 'READY', 
+        progress: 0,
+        error_message: err.message || 'Error starting process' 
+      } : f));
       setErrorToast(err.message || 'Error starting process');
     }
   };
 
   const handleProcessAll = async () => {
+    // 1. Immediately update all eligible files to PROCESSING
+    setFiles(prev => prev.map(f => (f.status === 'READY' || f.status === 'FAILED') ? { 
+      ...f, 
+      status: 'PROCESSING', 
+      progress: 5,
+      pages_scanned: 0,
+      error_message: null 
+    } : f));
+
     try {
       const res = await fetch(`${API_BASE}/api/process-all`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to initiate batch processing');
-      setFiles(prev => prev.map(f => (f.status === 'READY' || f.status === 'FAILED') ? { ...f, status: 'PROCESSING', progress: 10 } : f));
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || errJson.error || 'Failed to initiate batch processing');
+      }
     } catch (err: any) {
+      await fetchFiles();
       setErrorToast(err.message || 'Error starting batch process');
     }
   };
@@ -488,7 +568,12 @@ export const App: React.FC = () => {
               type="file"
               ref={fileInputRef}
               onChange={(e) => {
-                if (e.target.files) handleStageFiles(e.target.files);
+                if (e.target.files && e.target.files.length > 0) {
+                  const valid = handleStageFiles(e.target.files);
+                  if (valid.length > 0) {
+                    handleUploadFiles(valid);
+                  }
+                }
               }}
               multiple
               accept=".pdf"
@@ -498,16 +583,17 @@ export const App: React.FC = () => {
             {/* Interactive Drop / Staged Area */}
             <div style={{ padding: '36px 32px 28px' }}>
               {stagedFiles.length === 0 ? (
-                /* State 1: Dropzone Initial View */
+                /* State 1: Dropzone Initial View (Centrally Aligned Upload Document Button) */
                 <div 
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer',
-                    padding: '16px'
+                    cursor: isUploading ? 'default' : 'pointer',
+                    padding: '24px 16px',
+                    textAlign: 'center'
                   }}
                 >
                   <div style={{
@@ -527,48 +613,40 @@ export const App: React.FC = () => {
                   </div>
 
                   <h3 style={{
-                    fontSize: '1.25rem',
+                    fontSize: '1.35rem',
                     fontWeight: 700,
                     fontFamily: 'var(--font-display)',
                     color: '#ffffff',
                     marginBottom: '8px'
                   }}>
-                    Upload Financial Statement PDFs
+                    Upload Document
                   </h3>
                   <p style={{
                     color: 'var(--text-muted)',
                     fontSize: '0.92rem',
-                    marginBottom: '20px',
+                    marginBottom: '24px',
                     maxWidth: '480px',
                     lineHeight: 1.5
                   }}>
-                    Drag and drop single or multiple financial reports, or click to browse files
+                    Drag and drop single or multiple financial reports, or click the button below to browse
                   </p>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ 
-                        padding: '11px 32px', 
-                        fontSize: '0.94rem',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: '0 4px 20px rgba(49, 92, 255, 0.4)'
-                      }}
+                    <AnimatedUploadButton
+                      state={uploadButtonState}
+                      progress={uploadProgress}
+                      label="Upload Document"
+                      loadingLabel="Uploading Document..."
+                      disabled={isUploading}
                       onClick={(e) => {
                         e.stopPropagation();
                         fileInputRef.current?.click();
                       }}
-                    >
-                      <UploadCloud size={18} /> Import Files
-                    </button>
+                    />
                   </div>
                 </div>
               ) : (
-                /* State 2 & 3: User Selected File(s) Staged View */
+                /* State 2 & 3: User Selected File(s) Staged View (Centrally Aligned Upload Action) */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -579,6 +657,7 @@ export const App: React.FC = () => {
                     </div>
                     <button
                       type="button"
+                      disabled={isUploading}
                       onClick={() => {
                         setStagedFiles([]);
                         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -587,11 +666,12 @@ export const App: React.FC = () => {
                         background: 'transparent',
                         border: 'none',
                         color: 'var(--text-muted)',
-                        cursor: 'pointer',
+                        cursor: isUploading ? 'not-allowed' : 'pointer',
                         fontSize: '0.82rem',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '4px',
+                        opacity: isUploading ? 0.5 : 1
                       }}
                     >
                       <X size={14} /> Clear selection
@@ -634,6 +714,7 @@ export const App: React.FC = () => {
 
                         <button
                           type="button"
+                          disabled={isUploading}
                           onClick={() => {
                             const updated = stagedFiles.filter((_, i) => i !== idx);
                             setStagedFiles(updated);
@@ -647,10 +728,11 @@ export const App: React.FC = () => {
                             borderRadius: '8px',
                             padding: '6px',
                             color: 'var(--text-muted)',
-                            cursor: 'pointer',
+                            cursor: isUploading ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            opacity: isUploading ? 0.4 : 1
                           }}
                           title="Remove file"
                         >
@@ -660,41 +742,39 @@ export const App: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* State 3: Upload Action Button */}
+                  {/* Centrally Aligned Upload Action Button (Requirement 1 & 2) */}
                   <div style={{
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingTop: '12px',
+                    justifyContent: 'center',
+                    paddingTop: '18px',
                     borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                    flexWrap: 'wrap',
                     gap: '12px'
                   }}>
+                    <AnimatedUploadButton
+                      state={uploadButtonState}
+                      progress={uploadProgress}
+                      label="Upload Document"
+                      loadingLabel="Uploading Document..."
+                      disabled={isUploading || stagedFiles.length === 0}
+                      onClick={() => handleUploadFiles(stagedFiles)}
+                    />
+
                     <button
                       type="button"
+                      disabled={isUploading}
                       onClick={() => fileInputRef.current?.click()}
                       className="btn btn-secondary"
-                      style={{ fontSize: '0.85rem', padding: '8px 18px' }}
+                      style={{
+                        fontSize: '0.82rem',
+                        padding: '6px 18px',
+                        opacity: isUploading ? 0.4 : 1,
+                        pointerEvents: isUploading ? 'none' : undefined
+                      }}
                     >
-                      Browse Files
+                      Browse Additional Files
                     </button>
-
-                    {isUploading ? (
-                      <ThemeLiquidLoader statusText="Uploading Document..." width={280} height={50} />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleUploadFiles(stagedFiles)}
-                        className="btn btn-primary"
-                        style={{
-                          fontSize: '0.92rem',
-                          padding: '10px 28px',
-                          boxShadow: '0 4px 20px rgba(49, 92, 255, 0.5)'
-                        }}
-                      >
-                        <UploadCloud size={16} /> Upload Document
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
