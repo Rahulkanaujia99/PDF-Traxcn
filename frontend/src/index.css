@@ -119,11 +119,17 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  will-change: transform, box-shadow;
+  transition: 
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(56, 189, 248, 0.45);
 }
 
 /* Modern Pill Buttons */
@@ -504,30 +510,31 @@ body {
   border-radius: 18px;
   padding: 20px 24px;
   box-shadow: var(--shadow-sm);
-  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
+  will-change: transform, box-shadow;
+  transition: 
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.metric-card::before {
+.metric-card::before,
+.glass-panel::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(49, 92, 255, 0.4), transparent);
+  background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.65) 50%, transparent 100%);
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
 }
 
-.metric-card:hover {
-  border-color: rgba(49, 92, 255, 0.3);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.metric-card:hover::before {
+.metric-card:hover::before,
+.glass-panel:hover::before {
   opacity: 1;
 }
 
@@ -738,29 +745,57 @@ body {
   }
 }
 
-/* Hover Highlight Shadow Aura (Image 5 Inspiration) */
-.hover-aura-glow,
-.glass-panel,
-.ai-prompt-box,
+/* ==========================================================================
+   Quantiva-Inspired Card Hover Animation (https://quantiva-ai-lovat.vercel.app/)
+   Features:
+   - Smooth, subtle lift effect (translateY(-4px))
+   - Soft glowing shadow with upper teal/cyan ambient aura (as in reference image)
+   - Highlighted border & luminous top accent
+   - Completely smooth return transition when cursor leaves
+   - Applied consistently across dashboard cards (Uploaded Documents, Pages Audited,
+     Disclaimers Scrubbed, Integrity Preservation, Document Cards, Staged Cards, Queue Toolbar)
+   ========================================================================== */
+
 .metric-card,
-.staged-file-card,
-.queue-toolbar {
-  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+.glass-panel,
+.queue-toolbar,
+.staged-file-card {
+  will-change: transform, box-shadow;
+  transition: 
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.hover-aura-glow:hover,
-.glass-panel:hover,
-.ai-prompt-box:hover,
 .metric-card:hover,
-.staged-file-card:hover,
-.queue-toolbar:hover {
-  border-color: rgba(255, 255, 255, 0.22) !important;
+.glass-panel:hover,
+.queue-toolbar:hover,
+.staged-file-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(56, 189, 248, 0.45) !important;
   box-shadow: 
-    -14px -14px 35px -5px rgba(56, 189, 248, 0.35),
-    14px -12px 35px -5px rgba(129, 140, 248, 0.35),
-    14px 14px 40px -5px rgba(192, 132, 252, 0.3),
-    -14px 14px 35px -5px rgba(251, 146, 60, 0.25),
-    0 0 24px 2px rgba(56, 189, 248, 0.35) !important;
+    0 16px 36px -8px rgba(0, 0, 0, 0.65),
+    0 0 24px -2px rgba(56, 189, 248, 0.22),
+    0 -5px 20px -2px rgba(45, 212, 191, 0.26) !important;
+}
+
+@media (hover: none) {
+  .metric-card:hover,
+  .glass-panel:hover,
+  .queue-toolbar:hover,
+  .staged-file-card:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-card:hover,
+  .glass-panel:hover,
+  .queue-toolbar:hover,
+  .staged-file-card:hover {
+    transform: none !important;
+    transition: none !important;
+  }
 }
 
 /* ==========================================================================
