@@ -886,11 +886,12 @@ export const App: React.FC = () => {
 
       {/* PAGE B: PROCESS DASHBOARD (with Fyntic Cosmic Ambient Background) */}
       {activePage === 'process' && (
-        <section className="page-container process-page-wrapper">
-          {/* Fyntic Cosmic Ambient Background (Requirement 5 & Screenshot 3) */}
+        <>
+          {/* Fyntic Cosmic Ambient Background - Full Viewport Coverage */}
           <FynticBackground />
 
-          <div className="process-page-content">
+          <section className="page-container process-page-wrapper">
+            <div className="process-page-content">
             {/* Queue Header Bar */}
             <div className="queue-toolbar">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -1054,6 +1055,7 @@ export const App: React.FC = () => {
             )}
           </div>
         </section>
+        </>
       )}
 
       {/* PAGE C: SHOW DOCUMENTS */}
