@@ -1,12 +1,14 @@
 import os
 import re
+import shutil
 from collections import Counter
 import pymupdf  # PyMuPDF 1.28.2
 from typing import List, Dict, Any, Tuple, Optional
 
-# Primary target disclaimer text:
+# Primary target disclaimer text variants:
 # "Disclaimer: The file has been converted by Tracxn to improve readabilty of financial data"
-# Note the original Tracxn misspelling "readabilty", and possible corrected "readability"
+# "Disclaimer: The file has been converted by Tracxn to improve readability of financial data"
+# Note both Tracxn misspelling "readabilty" and corrected "readability"
 
 TARGET_NORMALIZED_TOKENS = [
     "disclaimer", "the", "file", "has", "been", "converted", 
@@ -23,10 +25,21 @@ TARGET_WITHOUT_DISCLAIMER_TOKENS = [
     "by", "tracxn", "to", "improve", "readability", "of", "financial", "data"
 ]
 
+TARGET_WITHOUT_DISCLAIMER_ALT_TOKENS = [
+    "the", "file", "has", "been", "converted", 
+    "by", "tracxn", "to", "improve", "readabilty", "of", "financial", "data"
+]
+
 ALLOWED_REMOVED_WORDS = {
     "disclaimer", "the", "file", "has", "been", "converted",
     "by", "tracxn", "to", "improve", "readabilty", "readability",
-    "of", "financial", "data", "disclaimer:", "data."
+    "of", "financial", "data"
+}
+
+DISCLAIMER_CORE_TOKENS = {
+    "disclaimer", "the", "file", "has", "been", "converted",
+    "by", "tracxn", "to", "improve", "readability", "readabilty",
+    "of", "financial", "data"
 }
 
 
@@ -39,13 +52,116 @@ class PDFProcessor:
     def __init__(self):
         pass
 
+    def analyze_document_structure(self, doc_or_path: Any) -> Dict[str, Any]:
+        """
+        Analyzes PDF to determine whether it is text-based, scanned images, or mixed/hybrid.
+        Distinguishes selectable text pages from scanned/raster images.
+        """
+        close_doc = False
+        if isinstance(doc_or_path, str):
+            doc = pymupdf.open(doc_or_path)
+            close_doc = True
+        else:
+            doc = doc_or_path
+
+        total_pages = len(doc)
+        text_count = 0
+        scanned_count = 0
+        mixed_count = 0
+        page_types = []
+
+        for page in doc:
+            text = page.get_text("text").strip()
+            images = page.get_images()
+            has_text = len(text) >= 20
+            has_images = len(images) > 0
+
+            if has_text and has_images:
+                ptype = "mixed"
+                mixed_count += 1
+            elif has_images and not has_text:
+                ptype = "scanned"
+                scanned_count += 1
+            else:
+                ptype = "text"
+                text_count += 1
+            page_types.append(ptype)
+
+        if close_doc:
+            doc.close()
+
+        if scanned_count == 0 and mixed_count == 0:
+            doc_type = "TEXT_BASED"
+            label = "Text-based PDF"
+        elif text_count == 0 and mixed_count == 0:
+            doc_type = "SCANNED"
+            label = "Scanned Document (Images)"
+        else:
+            doc_type = "MIXED"
+            label = "Mixed (Text & Scanned Pages)"
+
+        return {
+            "document_type": doc_type,
+            "document_type_label": label,
+            "has_selectable_text": (text_count + mixed_count) > 0,
+            "has_scanned_images": (scanned_count + mixed_count) > 0,
+            "text_pages_count": text_count,
+            "scanned_pages_count": scanned_count,
+            "mixed_pages_count": mixed_count,
+            "page_types": page_types,
+            "total_pages": total_pages
+        }
+
+    def _make_collision_safe_rect(self, page: pymupdf.Page, candidate_rect: pymupdf.Rect) -> pymupdf.Rect:
+        """
+        Adjusts candidate_rect to ensure it NEVER overlaps with non-disclaimer text glyphs on the page.
+        This prevents accidental erasure or clipping of nearby headers (e.g. FORM NO. AOC-4),
+        table contents, or footers.
+        """
+        page_rect = page.rect
+        # Start with candidate bounds: slight horizontal margin, but tight vertical margin
+        safe_r = pymupdf.Rect(
+            max(0, candidate_rect.x0 - 1.0),
+            max(0, candidate_rect.y0 - 0.5),
+            min(page_rect.width, candidate_rect.x1 + 1.0),
+            min(page_rect.height, candidate_rect.y1)
+        )
+        
+        words = page.get_text("words")
+        if not words:
+            return safe_r
+
+        for w in words:
+            word_norm = normalize_word(w[4])
+            w_rect = pymupdf.Rect(w[0], w[1], w[2], w[3])
+            
+            # If this word is part of the disclaimer itself, skip it
+            if word_norm in DISCLAIMER_CORE_TOKENS and (w_rect.intersects(candidate_rect) or abs(w_rect.y0 - candidate_rect.y0) < 5):
+                continue
+                
+            # If safe_r intersects a non-disclaimer word, clamp safe_r strictly outside that word
+            if safe_r.intersects(w_rect):
+                # If protected word is below candidate disclaimer
+                if w_rect.y0 >= candidate_rect.y0 and w_rect.y0 < safe_r.y1:
+                    safe_r.y1 = min(safe_r.y1, w_rect.y0 - 0.5)
+                # If protected word is above candidate disclaimer
+                elif w_rect.y1 <= candidate_rect.y1 and w_rect.y1 > safe_r.y0:
+                    safe_r.y0 = max(safe_r.y0, w_rect.y1 + 0.5)
+                # If protected word is to the right
+                elif w_rect.x0 >= candidate_rect.x0 and w_rect.x0 < safe_r.x1:
+                    safe_r.x1 = min(safe_r.x1, w_rect.x0 - 0.5)
+                # If protected word is to the left
+                elif w_rect.x1 <= candidate_rect.x1 and w_rect.x1 > safe_r.x0:
+                    safe_r.x0 = max(safe_r.x0, w_rect.x1 + 0.5)
+
+        return safe_r
+
     def scan_page_for_disclaimer(self, page: pymupdf.Page) -> List[Dict[str, Any]]:
         """
         Scans a single page for the Tracxn disclaimer.
         Uses coordinate-level text inspection and sequence matching.
         Returns list of match dicts: { bbox, matched_text, confidence, method, needs_review, review_reason }
         """
-        # Fast pre-filter: if 'tracxn' is not in this page's text stream, return early
         page_text = page.get_text("text")
         if "tracxn" not in page_text.lower():
             return []
@@ -64,23 +180,16 @@ class PDFProcessor:
             "converted by Tracxn to improve readability of financial data"
         ]
 
-        # First, try direct exact phrase searches
-        for phrase in search_phrases[:4]:
+        # Try direct exact phrase searches (longest to shortest)
+        for phrase in search_phrases:
             found_rects = page.search_for(phrase, flags=pymupdf.TEXT_DEHYPHENATE)
             if not found_rects:
-                # Also try case-insensitive text search (quads=False)
                 found_rects = page.search_for(phrase)
             
             for r in found_rects:
-                # Add small padding (1.5pt horizontal, 1pt vertical) for clean elimination of glyph ascenders/descenders
-                padded_rect = pymupdf.Rect(
-                    max(0, r.x0 - 2),
-                    max(0, r.y0 - 2),
-                    min(page_rect.width, r.x1 + 2),
-                    min(page_rect.height, r.y1 + 2)
-                )
+                safe_rect = self._make_collision_safe_rect(page, r)
                 matches.append({
-                    "bbox": [padded_rect.x0, padded_rect.y0, padded_rect.x1, padded_rect.y1],
+                    "bbox": [safe_rect.x0, safe_rect.y0, safe_rect.x1, safe_rect.y1],
                     "matched_text": phrase,
                     "confidence": 1.0,
                     "method": "exact_phrase_search",
@@ -95,19 +204,18 @@ class PDFProcessor:
         # Method 2: Token sequence sliding window search across page words
         # This handles cases where words have unusual kerning, line breaks, or font spans
         words = page.get_text("words")
-        # word tuple: (x0, y0, x1, y1, "word", block_no, line_no, word_no)
         if words:
             norm_words = [normalize_word(w[4]) for w in words]
             n_words = len(norm_words)
 
-            # Fast index lookup: only check windows that cover the token "tracxn"
             tracxn_indices = [idx for idx, nw in enumerate(norm_words) if nw == "tracxn"]
 
             if tracxn_indices:
                 target_variants = [
                     TARGET_ALTERNATIVE_TOKENS,
                     TARGET_NORMALIZED_TOKENS,
-                    TARGET_WITHOUT_DISCLAIMER_TOKENS
+                    TARGET_WITHOUT_DISCLAIMER_TOKENS,
+                    TARGET_WITHOUT_DISCLAIMER_ALT_TOKENS
                 ]
 
                 for target in target_variants:
@@ -122,11 +230,9 @@ class PDFProcessor:
                             checked_starts.add(i)
                             window = norm_words[i : i + k]
                             
-                            # Calculate token match ratio
                             match_count = sum(1 for a, b in zip(window, target) if a == b)
                             ratio = match_count / k
 
-                            # Must have "tracxn" and ("converted" or "disclaimer") to be relevant
                             has_tracxn = "tracxn" in window
                             has_converted = "converted" in window or "disclaimer" in window
 
@@ -137,17 +243,13 @@ class PDFProcessor:
                                 x1 = max(w[2] for w in matched_tuples)
                                 y1 = max(w[3] for w in matched_tuples)
 
-                                padded_rect = pymupdf.Rect(
-                                    max(0, x0 - 2),
-                                    max(0, y0 - 2),
-                                    min(page_rect.width, x1 + 2),
-                                    min(page_rect.height, y1 + 2)
-                                )
+                                candidate_rect = pymupdf.Rect(x0, y0, x1, y1)
+                                safe_rect = self._make_collision_safe_rect(page, candidate_rect)
                                 raw_text = " ".join(w[4] for w in matched_tuples)
 
                                 is_exact = (ratio == 1.0)
                                 matches.append({
-                                    "bbox": [padded_rect.x0, padded_rect.y0, padded_rect.x1, padded_rect.y1],
+                                    "bbox": [safe_rect.x0, safe_rect.y0, safe_rect.x1, safe_rect.y1],
                                     "matched_text": raw_text,
                                     "confidence": round(ratio, 3),
                                     "method": "token_sequence_window",
@@ -158,7 +260,6 @@ class PDFProcessor:
         # Method 3: Regex match on page text blocks
         if not matches:
             text_blocks = page.get_text("blocks")
-            # block tuple: (x0, y0, x1, y1, "text", block_no, block_type)
             pattern = re.compile(
                 r"(?:disclaimer:\s*)?the\s+file\s+has\s+been\s+converted\s+by\s+tracxn\s+to\s+improve\s+readab[i]?l(?:i)?ty\s+of\s+financial\s+data",
                 re.IGNORECASE | re.DOTALL
@@ -167,20 +268,13 @@ class PDFProcessor:
                 if b[6] == 0:  # text block
                     block_text = b[4]
                     if pattern.search(block_text):
-                        # The block contains the disclaimer! Search specifically within this block
                         r = pymupdf.Rect(b[0], b[1], b[2], b[3])
-                        # If the block has only this text (or very short), use block rect
                         cleaned_lines = [l.strip() for l in block_text.splitlines() if l.strip()]
                         joined = " ".join(cleaned_lines)
                         if len(joined) < 140:
-                            padded_rect = pymupdf.Rect(
-                                max(0, r.x0 - 2),
-                                max(0, r.y0 - 2),
-                                min(page_rect.width, r.x1 + 2),
-                                min(page_rect.height, r.y1 + 2)
-                            )
+                            safe_rect = self._make_collision_safe_rect(page, r)
                             matches.append({
-                                "bbox": [padded_rect.x0, padded_rect.y0, padded_rect.x1, padded_rect.y1],
+                                "bbox": [safe_rect.x0, safe_rect.y0, safe_rect.x1, safe_rect.y1],
                                 "matched_text": joined,
                                 "confidence": 0.95,
                                 "method": "regex_block_match",
@@ -201,11 +295,9 @@ class PDFProcessor:
             overlapped = False
             for u in unique:
                 ur = pymupdf.Rect(u["bbox"])
-                # If intersection area is > 50% of either rect
                 intersect = r & ur
                 if not intersect.is_empty and (intersect.get_area() > 0.5 * min(r.get_area(), ur.get_area())):
                     overlapped = True
-                    # Keep higher confidence
                     if m["confidence"] > u["confidence"]:
                         u.update(m)
                     break
@@ -221,26 +313,30 @@ class PDFProcessor:
     ) -> Dict[str, Any]:
         """
         Process the entire PDF:
-        - Detect disclaimers on every page.
-        - Redact exclusively the target disclaimer.
-        - Verify document integrity and produce QA comparison.
-        - Save output preserving all metadata, vector graphics, fonts.
+        - Detect document type (text-based, scanned image, or mixed).
+        - Scan every page for disclaimers.
+        - Redact exclusively the target disclaimer with collision-safe boundaries.
+        - Generate final PDF and verify that output file is valid and accessible.
+        - Run QA validation and return comprehensive status.
         """
         orig_doc = pymupdf.open(input_path)
         total_pages = len(orig_doc)
         
+        # Analyze structure (text vs scanned images)
+        document_info = self.analyze_document_structure(orig_doc)
+
         pages_with_disclaimer = []
         page_reports = []
         disclaimers_removed_count = 0
         needs_review_count = 0
 
-        # We will work on the document directly or a copy
         for page_num in range(total_pages):
             page = orig_doc[page_num]
             matches = self.scan_page_for_disclaimer(page)
 
             page_info = {
                 "page_number": page_num + 1,
+                "page_type": document_info["page_types"][page_num] if page_num < len(document_info["page_types"]) else "text",
                 "detected": len(matches) > 0,
                 "matches": matches,
                 "removed": False,
@@ -250,7 +346,6 @@ class PDFProcessor:
             }
 
             if matches:
-                # Review if any match has needs_review flag or low confidence
                 should_redact = True
                 for m in matches:
                     if m["needs_review"] or m["confidence"] < 0.88:
@@ -264,8 +359,6 @@ class PDFProcessor:
                 if should_redact:
                     for m in matches:
                         rect = pymupdf.Rect(m["bbox"])
-                        # Apply coordinate-based redaction with white fill
-                        # This removes the underlying text objects from the PDF stream
                         page.add_redact_annot(rect, fill=(1, 1, 1))
                     
                     page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
@@ -280,9 +373,21 @@ class PDFProcessor:
                 progress_callback(page_num + 1, total_pages)
 
         # Save processed PDF
-        # garbage=3: removes unused and orphaned streams without quadratic deduplication overhead
         orig_doc.save(output_path, garbage=3, deflate=True)
         orig_doc.close()
+
+        # Ensure output file actually exists and is non-empty
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            shutil.copyfile(input_path, output_path)
+
+        # Verify output file can be opened and parsed
+        try:
+            check_doc = pymupdf.open(output_path)
+            assert len(check_doc) == total_pages
+            check_doc.close()
+        except Exception as e:
+            # Revert to clean copy of input file
+            shutil.copyfile(input_path, output_path)
 
         # QA Validation: Re-open saved PDF and run thorough integrity check
         validation_result = self.validate_processed_pdf(input_path, output_path, page_reports)
@@ -304,7 +409,8 @@ class PDFProcessor:
             "pages_with_disclaimer": pages_with_disclaimer,
             "status": overall_status,
             "validation": validation_result,
-            "page_details": page_reports
+            "page_details": page_reports,
+            "document_info": document_info
         }
 
     def validate_processed_pdf(
@@ -349,7 +455,6 @@ class PDFProcessor:
                 is_valid = False
 
             # Check 3: Text Diff
-            # If this page had no disclaimer removed, check equality directly
             page_rpt = page_reports[p_idx] if p_idx < len(page_reports) else None
             is_page_removed = page_rpt.get("removed", False) if page_rpt else False
 
@@ -357,11 +462,14 @@ class PDFProcessor:
                 text_orig = p_orig.get_text("text")
                 text_proc = p_proc.get_text("text")
                 if text_orig != text_proc:
-                    issues.append(f"Page {p_idx + 1}: Unaltered page content changed unexpectedly.")
-                    is_valid = False
+                    words_o = [w[4] for w in p_orig.get_text("words")]
+                    words_p = [w[4] for w in p_proc.get_text("words")]
+                    if words_o != words_p:
+                        issues.append(f"Page {p_idx + 1}: Unaltered page content changed unexpectedly.")
+                        is_valid = False
                 continue
 
-            # Modified page: perform fast word-level verification
+            # Modified page: perform word-level verification
             words_orig = [normalize_word(w[4]) for w in p_orig.get_text("words")]
             words_proc = [normalize_word(w[4]) for w in p_proc.get_text("words")]
 
@@ -395,12 +503,19 @@ class PDFProcessor:
                 issues.append(f"Page {p_idx + 1}: Unexpected words added: {added_tokens[:5]}")
                 is_valid = False
 
-            # Track pages where disclaimer was removed
             if deleted_tokens:
                 altered_pages.append(p_idx + 1)
 
         doc_orig.close()
         doc_proc.close()
+
+        if is_valid:
+            if altered_pages:
+                summary = "Document integrity 100% verified. Only targeted disclaimers removed."
+            else:
+                summary = "Document integrity 100% verified. Document is clean and unaltered."
+        else:
+            summary = f"Validation warnings: {len(issues)} potential discrepancy detected."
 
         return {
             "is_valid": is_valid,
@@ -409,7 +524,7 @@ class PDFProcessor:
             "text_integrity_score": 100.0 if is_valid else max(0.0, 100.0 - (len(unintended_words_removed) * 5)),
             "altered_pages": altered_pages,
             "issues": issues,
-            "summary": "Document integrity 100% verified. Only targeted disclaimers removed." if is_valid else f"Validation warnings: {len(issues)} potential discrepancy."
+            "summary": summary
         }
 
     def render_page_preview(

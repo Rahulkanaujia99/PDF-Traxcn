@@ -361,7 +361,7 @@ Generated: ${new Date().toISOString()}
               onClick={onDownload}
               className="btn btn-action"
             >
-              <Download size={16} /> Download Cleaned PDF
+              <Download size={16} /> {disclaimersRemoved > 0 ? 'Download Cleaned PDF' : 'Download PDF'}
             </button>
           </div>
         </div>

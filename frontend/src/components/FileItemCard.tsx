@@ -14,7 +14,7 @@ export interface FileRecord {
   page_count: number;
   upload_path: string;
   processed_path: string | null;
-  status: 'READY' | 'PROCESSING' | 'SUCCESS' | 'NO_MATCH' | 'NEEDS_REVIEW' | 'FAILED';
+  status: 'READY' | 'PROCESSING' | 'SUCCESS' | 'NO_MATCH' | 'NEEDS_REVIEW' | 'VALIDATION_FAILED' | 'FAILED';
   progress: number;
   pages_scanned: number;
   disclaimers_removed: number;
@@ -24,6 +24,13 @@ export interface FileRecord {
   validation: any | null;
   page_details: any[];
   error_message: string | null;
+  document_type?: 'TEXT_BASED' | 'SCANNED' | 'MIXED';
+  document_type_label?: string;
+  has_selectable_text?: boolean;
+  has_scanned_images?: boolean;
+  text_pages_count?: number;
+  scanned_pages_count?: number;
+  mixed_pages_count?: number;
 }
 
 interface FileItemCardProps {
@@ -59,19 +66,19 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
       case 'SUCCESS':
         return (
           <span className="badge badge-success">
-            <CheckCircle2 size={13} /> Cleaned ({file.disclaimers_removed} Removed)
+            <CheckCircle2 size={13} /> Completed Successfully ({file.disclaimers_removed} Removed)
           </span>
         );
       case 'NO_MATCH':
         return (
           <span className="badge badge-neutral">
-            <ShieldCheck size={13} /> Already Clean (0 Found)
+            <ShieldCheck size={13} /> {file.document_type === 'SCANNED' ? 'Scanned Document (Clean)' : 'Verified Clean (0 Found)'}
           </span>
         );
       case 'PROCESSING':
         return (
           <span className="badge badge-processing">
-            <Loader2 size={13} className="spin-slow" /> Scanning P.{file.pages_scanned}/{file.page_count}
+            <Loader2 size={13} className="spin-slow" /> Processing P.{file.pages_scanned}/{file.page_count}
           </span>
         );
       case 'NEEDS_REVIEW':
@@ -80,10 +87,16 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
             <AlertTriangle size={13} /> Needs Review ({file.needs_review_count})
           </span>
         );
+      case 'VALIDATION_FAILED':
+        return (
+          <span className="badge badge-failed" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+            <AlertTriangle size={13} /> Validation Warning
+          </span>
+        );
       case 'FAILED':
         return (
           <span className="badge badge-failed">
-            <AlertCircle size={13} /> Failed
+            <AlertCircle size={13} /> Processing Failed
           </span>
         );
       case 'READY':
@@ -117,12 +130,14 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
             borderRadius: '14px',
             background: isProcessed 
               ? 'rgba(16, 185, 129, 0.12)' 
+              : file.status === 'VALIDATION_FAILED' || file.status === 'FAILED'
+              ? 'rgba(239, 68, 68, 0.12)'
               : 'rgba(49, 92, 255, 0.12)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: isProcessed ? '#34d399' : '#315cff',
-            border: `1px solid ${isProcessed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(49, 92, 255, 0.3)'}`,
+            color: isProcessed ? '#34d399' : file.status === 'VALIDATION_FAILED' || file.status === 'FAILED' ? '#f87171' : '#315cff',
+            border: `1px solid ${isProcessed ? 'rgba(16, 185, 129, 0.3)' : file.status === 'VALIDATION_FAILED' || file.status === 'FAILED' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(49, 92, 255, 0.3)'}`,
             flexShrink: 0
           }}>
             <FileText size={22} />
@@ -143,6 +158,16 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
               <span>{file.formatted_size}</span>
               <span>•</span>
               <span><strong style={{ color: 'var(--text-main)' }}>{file.page_count}</strong> Pages</span>
+              <span>•</span>
+              <span style={{
+                color: file.document_type === 'SCANNED' ? '#fbbf24' : file.document_type === 'MIXED' ? '#c084fc' : '#60a5fa',
+                fontWeight: 600,
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '2px 8px',
+                borderRadius: '6px'
+              }}>
+                {file.document_type_label || (file.document_type === 'SCANNED' ? 'Scanned Document (Images)' : file.document_type === 'MIXED' ? 'Mixed (Text & Images)' : 'Text-based PDF')}
+              </span>
               {file.pages_with_disclaimer && file.pages_with_disclaimer.length > 0 && (
                 <>
                   <span>•</span>
@@ -170,38 +195,54 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           width="100%"
           height={52}
         />
-      ) : file.progress > 0 && (
+      ) : file.progress > 0 && file.status !== 'READY' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             <span>
               {file.status === 'SUCCESS' 
-                ? `Completed: ${file.disclaimers_removed} disclaimers scrubbed from ${file.page_count} pages`
-                : `Scan complete (${file.page_count} pages inspected)`
+                ? `Completed Successfully: ${file.disclaimers_removed} disclaimer${file.disclaimers_removed === 1 ? '' : 's'} removed • ${file.page_count} pages verified 100% intact`
+                : file.status === 'NO_MATCH'
+                ? (file.document_type === 'SCANNED'
+                    ? `Scan complete: Scanned image document inspected (${file.page_count} pages) • No disclaimer detected`
+                    : `Scan complete: ${file.page_count} pages inspected • No Tracxn disclaimer detected`
+                  )
+                : file.status === 'VALIDATION_FAILED'
+                ? `Validation warning detected on ${file.page_count} pages • Original document preserved`
+                : file.status === 'NEEDS_REVIEW'
+                ? `Scan complete: Flagged for manual review (${file.needs_review_count} page${file.needs_review_count === 1 ? '' : 's'})`
+                : `Processing failed (${file.pages_scanned} of ${file.page_count} pages inspected)`
               }
             </span>
             <span style={{ fontFamily: 'var(--font-mono)' }}>{file.progress}%</span>
           </div>
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${file.progress}%` }} />
+            <div className="progress-fill" style={{ 
+              width: `${file.progress}%`,
+              background: file.status === 'VALIDATION_FAILED' || file.status === 'FAILED' ? '#ef4444' : undefined
+            }} />
           </div>
         </div>
       )}
 
-      {/* Error Message if any */}
+      {/* Error / Validation Warning Message if any */}
       {file.error_message && (
         <div style={{
-          padding: '10px 14px',
+          padding: '12px 16px',
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
           borderRadius: '10px',
           fontSize: '0.84rem',
-          color: '#f87171'
+          color: '#f87171',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '8px'
         }}>
-          {file.error_message}
+          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>{file.error_message}</div>
         </div>
       )}
 
-      {/* Bottom Actions Row (Before/After Preview removed per specification) */}
+      {/* Bottom Actions Row */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -212,14 +253,14 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {isProcessed && (
+          {(isProcessed || file.status === 'VALIDATION_FAILED') && (
             <button
               onClick={() => onViewReport(file)}
               className="btn btn-secondary"
               style={{ fontSize: '0.82rem', padding: '6px 16px' }}
               title="View QA validation certificate"
             >
-              <ShieldCheck size={15} color="#10b981" /> QA Certificate
+              <ShieldCheck size={15} color={file.status === 'VALIDATION_FAILED' ? '#f87171' : '#10b981'} /> QA Certificate
             </button>
           )}
         </div>
@@ -244,13 +285,42 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
             </button>
           )}
 
+          {(file.status === 'FAILED' || file.status === 'VALIDATION_FAILED') && (
+            <>
+              <button
+                onClick={handleRemoveDisclaimer}
+                disabled={isStarting}
+                className="btn btn-primary"
+                style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+              >
+                {isStarting ? (
+                  <>
+                    <Loader2 size={15} className="spin-slow" /> Retrying...
+                  </>
+                ) : (
+                  <>
+                    <Play size={15} /> Retry Processing
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => onDownload(file.id, file.filename)}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                title="Download original document"
+              >
+                <Download size={15} /> Download Original
+              </button>
+            </>
+          )}
+
           {isProcessed && (
             <button
               onClick={() => onDownload(file.id, file.processed_filename)}
               className="btn btn-action"
               style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
-              <Download size={15} /> Download Cleaned PDF
+              <Download size={15} /> {file.status === 'SUCCESS' ? 'Download Cleaned PDF' : 'Download PDF'}
             </button>
           )}
         </div>

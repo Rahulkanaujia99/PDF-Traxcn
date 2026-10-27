@@ -277,7 +277,7 @@ export const App: React.FC = () => {
 
   const handleProcessAll = async () => {
     // 1. Immediately update all eligible files to PROCESSING
-    setFiles(prev => prev.map(f => (f.status === 'READY' || f.status === 'FAILED') ? { 
+    setFiles(prev => prev.map(f => (f.status === 'READY' || f.status === 'FAILED' || f.status === 'VALIDATION_FAILED') ? { 
       ...f, 
       status: 'PROCESSING', 
       progress: 5,
@@ -374,7 +374,7 @@ export const App: React.FC = () => {
   const totalPages = files.reduce((acc, f) => acc + (f.page_count || 0), 0);
   const totalDisclaimersRemoved = files.reduce((acc, f) => acc + (f.disclaimers_removed || 0), 0);
   const processedFilesCount = files.filter(f => ['SUCCESS', 'NO_MATCH', 'NEEDS_REVIEW'].includes(f.status)).length;
-  const readyFilesCount = files.filter(f => f.status === 'READY').length;
+  const readyFilesCount = files.filter(f => f.status === 'READY' || f.status === 'FAILED' || f.status === 'VALIDATION_FAILED').length;
   const convertedFiles = files.filter(f => ['SUCCESS', 'NO_MATCH', 'NEEDS_REVIEW'].includes(f.status));
 
   // Modern formatted date and time

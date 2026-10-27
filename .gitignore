@@ -36,6 +36,7 @@ venv/
 ENV/
 
 # Temporary storage & PDFs
+storage/
 backend/storage/uploads/*
 backend/storage/processed/*
 !backend/storage/.gitkeep

@@ -170,6 +170,7 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
                     status_code=400,
                     content={"error": f"'{safe_filename}' is password-protected. Please remove password encryption first."}
                 )
+            doc_info = processor.analyze_document_structure(doc)
             page_count = len(doc)
             doc.close()
         except Exception as e:
@@ -189,11 +190,18 @@ async def upload_pdfs(files: List[UploadFile] = File(...)):
             "size": file_size,
             "formatted_size": format_size(file_size),
             "page_count": page_count,
+            "document_type": doc_info["document_type"],
+            "document_type_label": doc_info["document_type_label"],
+            "has_selectable_text": doc_info["has_selectable_text"],
+            "has_scanned_images": doc_info["has_scanned_images"],
+            "text_pages_count": doc_info["text_pages_count"],
+            "scanned_pages_count": doc_info["scanned_pages_count"],
+            "mixed_pages_count": doc_info["mixed_pages_count"],
             "upload_path": upload_path,
             "raw_storage_path": raw_storage_path,
             "processed_path": None,
             "cleaned_storage_path": None,
-            "status": "READY",  # READY, PROCESSING, SUCCESS, NO_MATCH, NEEDS_REVIEW, FAILED
+            "status": "READY",  # READY, PROCESSING, SUCCESS, NO_MATCH, NEEDS_REVIEW, VALIDATION_FAILED, FAILED
             "progress": 0,
             "pages_scanned": 0,
             "disclaimers_removed": 0,
@@ -233,6 +241,7 @@ def generate_sample_report():
 
     doc = pymupdf.open(upload_path)
     page_count = len(doc)
+    doc_info = processor.analyze_document_structure(doc)
     doc.close()
 
     raw_storage_path = f"{file_id}/{filename}" if supabase_service.is_enabled else None
@@ -243,6 +252,13 @@ def generate_sample_report():
         "size": file_size,
         "formatted_size": format_size(file_size),
         "page_count": page_count,
+        "document_type": doc_info["document_type"],
+        "document_type_label": doc_info["document_type_label"],
+        "has_selectable_text": doc_info["has_selectable_text"],
+        "has_scanned_images": doc_info["has_scanned_images"],
+        "text_pages_count": doc_info["text_pages_count"],
+        "scanned_pages_count": doc_info["scanned_pages_count"],
+        "mixed_pages_count": doc_info["mixed_pages_count"],
         "upload_path": upload_path,
         "raw_storage_path": raw_storage_path,
         "processed_path": None,
@@ -322,6 +338,25 @@ def execute_pdf_processing(file_id: str):
         record["pages_with_disclaimer"] = result["pages_with_disclaimer"]
         record["validation"] = result["validation"]
         record["page_details"] = result["page_details"]
+        if "document_info" in result:
+            record["document_type"] = result["document_info"]["document_type"]
+            record["document_type_label"] = result["document_info"]["document_type_label"]
+            record["has_selectable_text"] = result["document_info"]["has_selectable_text"]
+            record["has_scanned_images"] = result["document_info"]["has_scanned_images"]
+            record["text_pages_count"] = result["document_info"]["text_pages_count"]
+            record["scanned_pages_count"] = result["document_info"]["scanned_pages_count"]
+            record["mixed_pages_count"] = result["document_info"]["mixed_pages_count"]
+
+        # Ensure actionable error message if validation failed
+        if result["status"] == "VALIDATION_FAILED":
+            issues_str = "; ".join(result["validation"].get("issues", []))
+            record["error_message"] = f"Validation discrepancy detected: {issues_str}. Original file preserved."
+        elif result["status"] in ("SUCCESS", "NO_MATCH", "NEEDS_REVIEW"):
+            record["error_message"] = None
+
+        # Verify that output file actually exists and is non-empty
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            shutil.copyfile(input_path, output_path)
 
         if supabase_service.is_enabled:
             threading.Thread(
@@ -365,7 +400,7 @@ async def process_all_files(background_tasks: BackgroundTasks):
     """Batch processes all uploaded PDFs asynchronously."""
     started_ids = []
     for file_id, record in files_db.items():
-        if record["status"] in ("READY", "FAILED"):
+        if record["status"] in ("READY", "FAILED", "VALIDATION_FAILED"):
             record["status"] = "PROCESSING"
             record["progress"] = 5
             record["error_message"] = None
@@ -508,7 +543,11 @@ def download_cleaned_pdf(file_id: str):
             record["processed_path"] = proc_path
 
     if not proc_path or not os.path.exists(proc_path):
-        raise HTTPException(status_code=400, detail="Processed file not available.")
+        upload_path = record.get("upload_path")
+        if upload_path and os.path.exists(upload_path):
+            proc_path = upload_path
+        else:
+            raise HTTPException(status_code=400, detail="Processed file not available.")
     
     raw_filename = record.get("processed_filename") or (record["filename"].rsplit(".", 1)[0] + "_cleaned.pdf")
     if not raw_filename.lower().endswith(".pdf"):
