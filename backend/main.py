@@ -53,6 +53,8 @@ processor = PDFProcessor()
 
 # In-memory session registry for tracking files and processing state
 files_db: Dict[str, Dict[str, Any]] = {}
+# Active cancellation events mapping file_id -> threading.Event
+cancellation_events: Dict[str, threading.Event] = {}
 
 
 def format_size(size_bytes: int) -> str:
@@ -290,10 +292,19 @@ def generate_sample_report():
 
 
 def execute_pdf_processing(file_id: str):
-    """Worker function to process single PDF with real-time progress."""
+    """Worker function to process single PDF with real-time progress and cancellation support."""
     record = files_db.get(file_id)
     if not record:
         return
+
+    # Check if cancellation was requested before worker picked up task
+    if record.get("status") == "CANCELLATION_REQUESTED":
+        record["status"] = "CANCELLED"
+        record["error_message"] = "Conversion cancelled."
+        return
+
+    cancel_event = threading.Event()
+    cancellation_events[file_id] = cancel_event
 
     record["status"] = "PROCESSING"
     record["progress"] = 5
@@ -326,7 +337,26 @@ def execute_pdf_processing(file_id: str):
             record["progress"] = min(92, pct)
             record["pages_scanned"] = current
 
-        result = processor.process_pdf(input_path, output_path, progress_callback=on_progress)
+        result = processor.process_pdf(
+            input_path, 
+            output_path, 
+            progress_callback=on_progress,
+            cancel_check=cancel_event.is_set
+        )
+
+        # Handle cancellation triggered during processing
+        if result.get("status") == "CANCELLED" or cancel_event.is_set():
+            record["status"] = "CANCELLED"
+            record["error_message"] = "Conversion cancelled."
+            if supabase_service.is_enabled:
+                threading.Thread(
+                    target=lambda: supabase_service.update_file_record(file_id, {
+                        "status": "CANCELLED",
+                        "error_message": "Conversion cancelled."
+                    }),
+                    daemon=True
+                ).start()
+            return
 
         record["processed_path"] = output_path
         record["status"] = result["status"]
@@ -366,19 +396,25 @@ def execute_pdf_processing(file_id: str):
             ).start()
 
     except Exception as e:
-        record["status"] = "FAILED"
-        record["progress"] = 100
-        record["error_message"] = f"Processing error: {str(e)}"
-        if supabase_service.is_enabled:
-            err_msg = record["error_message"]
-            threading.Thread(
-                target=lambda: supabase_service.update_file_record(file_id, {
-                    "status": "FAILED",
-                    "progress": 100,
-                    "error_message": err_msg
-                }),
-                daemon=True
-            ).start()
+        if cancel_event.is_set():
+            record["status"] = "CANCELLED"
+            record["error_message"] = "Conversion cancelled."
+        else:
+            record["status"] = "FAILED"
+            record["progress"] = 100
+            record["error_message"] = f"Processing error: {str(e)}"
+            if supabase_service.is_enabled:
+                err_msg = record["error_message"]
+                threading.Thread(
+                    target=lambda: supabase_service.update_file_record(file_id, {
+                        "status": "FAILED",
+                        "progress": 100,
+                        "error_message": err_msg
+                    }),
+                    daemon=True
+                ).start()
+    finally:
+        cancellation_events.pop(file_id, None)
 
 
 @app.post("/api/process/{file_id}")
@@ -400,7 +436,7 @@ async def process_all_files(background_tasks: BackgroundTasks):
     """Batch processes all uploaded PDFs asynchronously."""
     started_ids = []
     for file_id, record in files_db.items():
-        if record["status"] in ("READY", "FAILED", "VALIDATION_FAILED"):
+        if record["status"] in ("READY", "FAILED", "VALIDATION_FAILED", "CANCELLED"):
             record["status"] = "PROCESSING"
             record["progress"] = 5
             record["error_message"] = None
@@ -408,6 +444,57 @@ async def process_all_files(background_tasks: BackgroundTasks):
             started_ids.append(file_id)
     
     return {"message": "Batch processing initiated", "files_count": len(started_ids), "file_ids": started_ids}
+
+
+@app.post("/api/cancel/{file_id}")
+async def cancel_file_conversion(file_id: str):
+    """
+    Cancels an ongoing conversion job for a single file in real-time.
+    Immediately signals the processor loop to abort and updates file status.
+    """
+    if file_id not in files_db:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    record = files_db[file_id]
+    if record["status"] in ("PROCESSING", "READY"):
+        record["status"] = "CANCELLATION_REQUESTED"
+        if file_id in cancellation_events:
+            cancellation_events[file_id].set()
+        else:
+            record["status"] = "CANCELLED"
+            record["error_message"] = "Conversion cancelled."
+
+        return {
+            "message": "Conversion cancellation initiated",
+            "file_id": file_id,
+            "status": record["status"]
+        }
+
+    return {
+        "message": f"File is currently in status '{record['status']}'",
+        "file_id": file_id,
+        "status": record["status"]
+    }
+
+
+@app.post("/api/cancel-all")
+async def cancel_all_conversions():
+    """Cancels all currently active PDF conversions."""
+    cancelled_count = 0
+    for file_id, record in files_db.items():
+        if record["status"] in ("PROCESSING", "READY", "CANCELLATION_REQUESTED"):
+            record["status"] = "CANCELLATION_REQUESTED"
+            if file_id in cancellation_events:
+                cancellation_events[file_id].set()
+            else:
+                record["status"] = "CANCELLED"
+                record["error_message"] = "Conversion cancelled."
+            cancelled_count += 1
+
+    return {
+        "message": f"Cancellation requested for {cancelled_count} active conversions",
+        "cancelled_count": cancelled_count
+    }
 
 
 def _parse_created_timestamp(val: Any) -> float:

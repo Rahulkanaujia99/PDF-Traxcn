@@ -309,13 +309,15 @@ class PDFProcessor:
         self,
         input_path: str,
         output_path: str,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        cancel_check: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Process the entire PDF:
         - Detect document type (text-based, scanned image, or mixed).
         - Scan every page for disclaimers.
         - Redact exclusively the target disclaimer with collision-safe boundaries.
+        - Support real-time cancellation check to abort ongoing conversions immediately.
         - Generate final PDF and verify that output file is valid and accessible.
         - Run QA validation and return comprehensive status.
         """
@@ -331,6 +333,22 @@ class PDFProcessor:
         needs_review_count = 0
 
         for page_num in range(total_pages):
+            # Check for real-time cancellation request before processing next page
+            if cancel_check and cancel_check():
+                orig_doc.close()
+                return {
+                    "total_pages": total_pages,
+                    "pages_scanned": page_num,
+                    "disclaimers_found": disclaimers_removed_count + needs_review_count,
+                    "disclaimers_removed": disclaimers_removed_count,
+                    "needs_review_count": needs_review_count,
+                    "pages_with_disclaimer": pages_with_disclaimer,
+                    "status": "CANCELLED",
+                    "validation": None,
+                    "page_details": page_reports,
+                    "document_info": document_info
+                }
+
             page = orig_doc[page_num]
             matches = self.scan_page_for_disclaimer(page)
 

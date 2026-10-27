@@ -1,9 +1,10 @@
 import React from 'react';
 import { 
   FileText, CheckCircle2, AlertTriangle, AlertCircle, 
-  Download, ShieldCheck, Play, Loader2, Sparkles 
+  Download, ShieldCheck, Play, Loader2, Sparkles, Square, ArrowRight 
 } from 'lucide-react';
 import { ThemeLiquidLoader } from './ThemeLiquidLoader';
+import { RollText } from './RollText';
 
 export interface FileRecord {
   id: string;
@@ -14,7 +15,7 @@ export interface FileRecord {
   page_count: number;
   upload_path: string;
   processed_path: string | null;
-  status: 'READY' | 'PROCESSING' | 'SUCCESS' | 'NO_MATCH' | 'NEEDS_REVIEW' | 'VALIDATION_FAILED' | 'FAILED';
+  status: 'READY' | 'PROCESSING' | 'CANCELLATION_REQUESTED' | 'CANCELLED' | 'SUCCESS' | 'NO_MATCH' | 'NEEDS_REVIEW' | 'VALIDATION_FAILED' | 'FAILED';
   progress: number;
   pages_scanned: number;
   disclaimers_removed: number;
@@ -36,6 +37,7 @@ export interface FileRecord {
 interface FileItemCardProps {
   file: FileRecord;
   onProcess: (id: string) => void;
+  onCancel?: (id: string) => void;
   onViewReport: (file: FileRecord) => void;
   onDownload: (id: string, filename?: string) => void;
 }
@@ -43,6 +45,7 @@ interface FileItemCardProps {
 export const FileItemCard: React.FC<FileItemCardProps> = ({
   file,
   onProcess,
+  onCancel,
   onViewReport,
   onDownload
 }) => {
@@ -50,9 +53,15 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
 
   const handleRemoveDisclaimer = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isStarting || file.status === 'PROCESSING') return;
+    if (isStarting || file.status === 'PROCESSING' || file.status === 'CANCELLATION_REQUESTED') return;
     setIsStarting(true);
     onProcess(file.id);
+  };
+
+  const handleStop = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (file.status !== 'PROCESSING' || !onCancel) return;
+    onCancel(file.id);
   };
 
   React.useEffect(() => {
@@ -79,6 +88,18 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         return (
           <span className="badge badge-processing">
             <Loader2 size={13} className="spin-slow" /> Processing P.{file.pages_scanned}/{file.page_count}
+          </span>
+        );
+      case 'CANCELLATION_REQUESTED':
+        return (
+          <span className="badge badge-warning" style={{ background: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+            <Loader2 size={13} className="spin-slow" /> Stopping Conversion...
+          </span>
+        );
+      case 'CANCELLED':
+        return (
+          <span className="badge badge-cancelled">
+            <AlertCircle size={13} /> Conversion Cancelled
           </span>
         );
       case 'NEEDS_REVIEW':
@@ -186,15 +207,34 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
         </div>
       </div>
 
-      {/* Liquid Theme Animation (IDWO0BQDxw) when processing */}
-      {file.status === 'PROCESSING' ? (
-        <ThemeLiquidLoader
-          statusText={`Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`}
-          subText={`${file.progress}% Completed`}
-          progress={file.progress}
-          width="100%"
-          height={52}
-        />
+      {/* Liquid Theme Animation (IDWO0BQDxw) when processing or halting */}
+      {file.status === 'CANCELLED' ? (
+        <div style={{
+          padding: '12px 16px',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          borderRadius: '10px',
+          fontSize: '0.84rem',
+          color: '#f87171',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <span>Conversion cancelled. You can restart conversion or download the original file.</span>
+        </div>
+      ) : file.status === 'PROCESSING' || file.status === 'CANCELLATION_REQUESTED' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <ThemeLiquidLoader
+            statusText={file.status === 'CANCELLATION_REQUESTED'
+              ? 'Halting document conversion...'
+              : `Scanning & coordinate analysis: ${file.pages_scanned} of ${file.page_count} pages...`}
+            subText={file.status === 'CANCELLATION_REQUESTED' ? 'Stopping...' : `${file.progress}% Completed`}
+            progress={file.progress}
+            width="100%"
+            height={52}
+          />
+        </div>
       ) : file.progress > 0 && file.status !== 'READY' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
@@ -225,7 +265,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
       )}
 
       {/* Error / Validation Warning Message if any */}
-      {file.error_message && (
+      {file.error_message && file.status !== 'CANCELLED' && (
         <div style={{
           padding: '12px 16px',
           background: 'rgba(239, 68, 68, 0.1)',
@@ -256,11 +296,15 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {(isProcessed || file.status === 'VALIDATION_FAILED') && (
             <button
               onClick={() => onViewReport(file)}
-              className="btn btn-secondary"
+              className="btn btn-secondary btn-roll"
               style={{ fontSize: '0.82rem', padding: '6px 16px' }}
               title="View QA validation certificate"
             >
-              <ShieldCheck size={15} color={file.status === 'VALIDATION_FAILED' ? '#f87171' : '#10b981'} /> QA Certificate
+              <RollText 
+                text="QA Certificate" 
+                icon={<ShieldCheck size={15} color={file.status === 'VALIDATION_FAILED' ? '#f87171' : '#10b981'} />} 
+                iconPosition="left" 
+              />
             </button>
           )}
         </div>
@@ -270,19 +314,65 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
             <button
               onClick={handleRemoveDisclaimer}
               disabled={isStarting}
-              className="btn btn-primary"
-              style={{ fontSize: '0.85rem', padding: '8px 20px', minWidth: '170px' }}
+              className="btn btn-primary btn-glow-beam btn-roll"
+              style={{ fontSize: '0.85rem', padding: '8px 20px', minWidth: '175px' }}
             >
               {isStarting ? (
                 <>
                   <Loader2 size={15} className="spin-slow" /> Starting...
                 </>
               ) : (
-                <>
-                  <Play size={15} /> Remove Disclaimer
-                </>
+                <RollText text="Remove Disclaimer" icon={<ArrowRight size={14} />} iconPosition="right" />
               )}
             </button>
+          )}
+
+          {file.status === 'PROCESSING' && (
+            <button
+              onClick={handleStop}
+              className="btn btn-stop-conversion btn-glow-beam-danger btn-roll"
+              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+              title="Stop ongoing document conversion"
+            >
+              <RollText text="Stop Conversion" icon={<Square size={13} fill="#f87171" />} iconPosition="left" />
+            </button>
+          )}
+
+          {file.status === 'CANCELLATION_REQUESTED' && (
+            <button
+              disabled
+              className="btn btn-stop-conversion"
+              style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+            >
+              <Loader2 size={14} className="spin-slow" /> Stopping...
+            </button>
+          )}
+
+          {file.status === 'CANCELLED' && (
+            <>
+              <button
+                onClick={handleRemoveDisclaimer}
+                disabled={isStarting}
+                className="btn btn-primary btn-glow-beam btn-roll"
+                style={{ fontSize: '0.85rem', padding: '8px 20px' }}
+              >
+                {isStarting ? (
+                  <>
+                    <Loader2 size={15} className="spin-slow" /> Starting...
+                  </>
+                ) : (
+                  <RollText text="Restart Conversion" icon={<Play size={14} />} iconPosition="left" />
+                )}
+              </button>
+              <button
+                onClick={() => onDownload(file.id, file.filename)}
+                className="btn btn-secondary btn-roll"
+                style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                title="Download original document"
+              >
+                <RollText text="Download Original" icon={<Download size={14} />} iconPosition="left" />
+              </button>
+            </>
           )}
 
           {(file.status === 'FAILED' || file.status === 'VALIDATION_FAILED') && (
@@ -290,7 +380,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
               <button
                 onClick={handleRemoveDisclaimer}
                 disabled={isStarting}
-                className="btn btn-primary"
+                className="btn btn-primary btn-glow-beam btn-roll"
                 style={{ fontSize: '0.85rem', padding: '8px 20px' }}
               >
                 {isStarting ? (
@@ -298,18 +388,16 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
                     <Loader2 size={15} className="spin-slow" /> Retrying...
                   </>
                 ) : (
-                  <>
-                    <Play size={15} /> Retry Processing
-                  </>
+                  <RollText text="Retry Processing" icon={<Play size={14} />} iconPosition="left" />
                 )}
               </button>
               <button
                 onClick={() => onDownload(file.id, file.filename)}
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-roll"
                 style={{ fontSize: '0.85rem', padding: '8px 16px' }}
                 title="Download original document"
               >
-                <Download size={15} /> Download Original
+                <RollText text="Download Original" icon={<Download size={14} />} iconPosition="left" />
               </button>
             </>
           )}
@@ -317,10 +405,14 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {isProcessed && (
             <button
               onClick={() => onDownload(file.id, file.processed_filename)}
-              className="btn btn-action"
+              className="btn btn-action btn-glow-beam-emerald btn-roll"
               style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
-              <Download size={15} /> {file.status === 'SUCCESS' ? 'Download Cleaned PDF' : 'Download PDF'}
+              <RollText 
+                text={file.status === 'SUCCESS' ? 'Download Cleaned PDF' : 'Download PDF'} 
+                icon={<Download size={15} />} 
+                iconPosition="left" 
+              />
             </button>
           )}
         </div>

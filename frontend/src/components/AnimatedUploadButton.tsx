@@ -1,5 +1,6 @@
 import React from 'react';
-import { UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { RollText } from './RollText';
 
 export type ButtonUploadState = 'idle' | 'loading' | 'success' | 'error';
 
@@ -38,7 +39,7 @@ export const AnimatedUploadButton: React.FC<AnimatedUploadButtonProps> = ({
         onClick={isInteractive ? onClick : undefined}
         disabled={!isInteractive}
         aria-busy={state === 'loading'}
-        className={`dribbble-upload-btn dribbble-btn-${state} ${className}`}
+        className={`dribbble-upload-btn dribbble-btn-${state} btn-glow-beam btn-roll ${className}`}
         style={{
           ...style,
           cursor: isInteractive ? 'pointer' : 'default',
@@ -65,11 +66,11 @@ export const AnimatedUploadButton: React.FC<AnimatedUploadButtonProps> = ({
           </div>
         )}
 
-        {/* Idle State: Normal Button with Upload Icon */}
+        {/* Idle State: Animated RollText with Upload Icon and Arrow */}
         {state === 'idle' && (
           <span className="dribbble-btn-label">
             <UploadCloud size={18} className="dribbble-btn-icon" />
-            <span>{label}</span>
+            <RollText text={label} icon={<ArrowRight size={14} />} iconPosition="right" />
           </span>
         )}
 

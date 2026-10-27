@@ -880,4 +880,329 @@ body {
   40%, 80% { transform: translateX(6px); }
 }
 
+/* ==========================================================================
+   REUSABLE ANIMATION SYSTEM (Flowtica & Fyntic inspired)
+   ========================================================================== */
+
+/* Shared Animation Variables */
+:root {
+  --beam-color-cyan: #38bdf8;
+  --beam-color-blue: #3b82f6;
+  --beam-color-indigo: #6366f1;
+  --beam-color-violet: #a855f7;
+  --beam-color-emerald: #10b981;
+  --beam-color-rose: #f43f5e;
+  --beam-color-amber: #f59e0b;
+  --beam-duration: 5s;
+  --beam-btn-duration: 3.5s;
+  --btn-roll-duration: 0.32s;
+  --glow-intensity: 0.65;
+}
+
+/* Conic gradient rotation property for smooth border orbiting beam */
+@property --beam-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes borderBeamRotate {
+  0% {
+    --beam-angle: 0deg;
+  }
+  100% {
+    --beam-angle: 360deg;
+  }
+}
+
+/* 1. Animated Border Beam Around Containers (Upload Document Section) */
+.border-beam-card {
+  position: relative;
+  border-radius: 24px;
+}
+
+.border-beam-card::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--beam-angle, 0deg) at 50% 50%,
+    transparent 0deg,
+    transparent 240deg,
+    rgba(56, 189, 248, 0.45) 285deg,
+    rgba(99, 102, 241, 0.9) 325deg,
+    #ffffff 352deg,
+    rgba(244, 63, 94, 0.85) 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderBeamRotate var(--beam-duration) linear infinite;
+  z-index: 2;
+}
+
+/* Ambient outer bloom for the container beam */
+.border-beam-card::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--beam-angle, 0deg) at 50% 50%,
+    transparent 0deg,
+    transparent 250deg,
+    rgba(56, 189, 248, 0.25) 290deg,
+    rgba(99, 102, 241, 0.5) 330deg,
+    rgba(255, 255, 255, 0.6) 352deg,
+    rgba(244, 63, 94, 0.4) 360deg
+  );
+  filter: blur(12px);
+  opacity: 0.65;
+  pointer-events: none;
+  animation: borderBeamRotate var(--beam-duration) linear infinite;
+  z-index: 0;
+  transition: opacity 0.3s ease;
+}
+
+.border-beam-card:hover::after {
+  opacity: 0.9;
+  filter: blur(16px);
+}
+
+/* 2. Animated Borders on Buttons (Flowtica & Screenshot 1) */
+.btn-glow-beam {
+  position: relative;
+  isolation: isolate;
+}
+
+.btn-glow-beam::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--beam-angle, 0deg) at 50% 50%,
+    transparent 0deg,
+    transparent 260deg,
+    rgba(56, 189, 248, 0.5) 295deg,
+    rgba(99, 102, 241, 0.95) 330deg,
+    #ffffff 352deg,
+    rgba(244, 63, 94, 0.8) 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderBeamRotate var(--beam-btn-duration) linear infinite;
+  z-index: 3;
+}
+
+/* Emerald variant for Download buttons */
+.btn-glow-beam-emerald::before {
+  background: conic-gradient(
+    from var(--beam-angle, 0deg) at 50% 50%,
+    transparent 0deg,
+    transparent 260deg,
+    rgba(16, 185, 129, 0.4) 295deg,
+    rgba(52, 211, 153, 0.9) 330deg,
+    #ffffff 352deg,
+    rgba(6, 182, 212, 0.8) 360deg
+  );
+}
+
+/* Rose / Amber variant for Stop Conversion button */
+.btn-glow-beam-danger::before {
+  background: conic-gradient(
+    from var(--beam-angle, 0deg) at 50% 50%,
+    transparent 0deg,
+    transparent 260deg,
+    rgba(245, 158, 11, 0.45) 295deg,
+    rgba(239, 68, 68, 0.95) 330deg,
+    #ffffff 352deg,
+    rgba(244, 63, 94, 0.85) 360deg
+  );
+}
+
+/* 3. Button Rolling Text Hover Effects (Screenshot 2 - "Get Started") */
+.btn-roll {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-roll-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-roll-track {
+  display: inline-block;
+  height: 1.35em;
+  line-height: 1.35em;
+  overflow: hidden;
+  position: relative;
+  vertical-align: middle;
+}
+
+.btn-roll-stack {
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--btn-roll-duration) cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.btn-roll:hover .btn-roll-stack,
+.btn-roll:focus-visible .btn-roll-stack {
+  transform: translateY(-50%);
+}
+
+.btn-roll-item {
+  display: block;
+  height: 1.35em;
+  line-height: 1.35em;
+  white-space: nowrap;
+}
+
+.btn-roll-arrow {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-roll:hover .btn-roll-arrow,
+.btn-roll:focus-visible .btn-roll-arrow {
+  transform: translateX(4px);
+}
+
+.btn-roll-icon-left {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 4. Halt / Stop Conversion Button Styles */
+.btn-stop-conversion {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  backdrop-filter: blur(8px);
+}
+
+.btn-stop-conversion:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-stop-conversion:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.btn-stop-all {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.32);
+  padding: 8px 18px;
+  font-size: 0.86rem;
+  backdrop-filter: blur(8px);
+}
+
+.btn-stop-all:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #ffffff;
+}
+
+.badge-cancelled {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* 5. Animated Doclear Brand Text on Page Load (Requirement 7) */
+@keyframes brandTextReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    background-position: -200% 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background-position: 200% 0;
+  }
+}
+
+.brand-text-animated {
+  display: inline-block;
+  background: linear-gradient(
+    115deg,
+    #ffffff 0%,
+    #ffffff 38%,
+    #7094ff 48%,
+    #38bdf8 52%,
+    #ffffff 62%,
+    #ffffff 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: brandTextReveal 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* 6. Process Page with Fyntic Background Container */
+.process-page-wrapper {
+  position: relative;
+  min-height: calc(100vh - 80px);
+  overflow: hidden;
+}
+
+.process-page-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Accessibility: Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .border-beam-card::before,
+  .border-beam-card::after,
+  .btn-glow-beam::before,
+  .brand-text-animated,
+  .spin-slow,
+  .progress-shimmer {
+    animation: none !important;
+  }
+
+  .border-beam-card::before,
+  .btn-glow-beam::before {
+    background: rgba(56, 189, 248, 0.3) !important;
+  }
+
+  .btn-roll-stack {
+    transition: none !important;
+  }
+
+  .brand-text-animated {
+    opacity: 1 !important;
+    transform: none !important;
+    background: none !important;
+    -webkit-text-fill-color: #ffffff !important;
+    color: #ffffff !important;
+  }
+}
+
 

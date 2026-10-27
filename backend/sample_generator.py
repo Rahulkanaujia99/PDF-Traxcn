@@ -170,6 +170,24 @@ def create_sample_tracxn_pdf(output_path: str, pages: int = 3) -> str:
         page3.insert_text(pymupdf.Point(460, y), v2, fontsize=9, fontname="hebo")
         y += 26
 
+    # Generate additional pages if pages > 3
+    if pages > 3:
+        for p_idx in range(4, pages + 1):
+            extra_page = doc.new_page(width=595, height=842)
+            extra_page.insert_text(
+                pymupdf.Point(75, 42),
+                "Disclaimer: The file has been converted by Tracxn to improve readabilty of financial data",
+                fontsize=10.5,
+                fontname="helv",
+                color=(0.95, 0.1, 0.1)
+            )
+            extra_page.insert_text(
+                pymupdf.Point(180, 100),
+                f"ULTRA GAS & ENERGY LIMITED - Financial Annexure Page {p_idx}",
+                fontsize=11,
+                fontname="hebo"
+            )
+
     doc.save(output_path)
     doc.close()
     return output_path

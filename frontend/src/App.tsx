@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   UploadCloud, Play, Download, Trash2, ShieldCheck, 
   Sparkles, AlertCircle, Info, X,
-  FileText, CheckCircle2, FileCheck, Clock
+  FileText, CheckCircle2, FileCheck, Clock, Square, ArrowRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { FileItemCard } from './components/FileItemCard';
 import type { FileRecord } from './components/FileItemCard';
 import { ValidationReportModal } from './components/ValidationReportModal';
 import { ConduitBackground } from './components/ConduitBackground';
+import { FynticBackground } from './components/FynticBackground';
+import { RollText } from './components/RollText';
 import { AnimatedUploadButton } from './components/AnimatedUploadButton';
 import type { ButtonUploadState } from './components/AnimatedUploadButton';
 import { API_BASE } from './config';
@@ -61,7 +63,7 @@ export const App: React.FC = () => {
   };
 
   // Stable poll for active processing tasks
-  const isAnyProcessing = files.some(f => f.status === 'PROCESSING');
+  const isAnyProcessing = files.some(f => f.status === 'PROCESSING' || f.status === 'CANCELLATION_REQUESTED');
   const prevProcessingCountRef = useRef(0);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export const App: React.FC = () => {
         const res = await fetch(`${API_BASE}/api/files`);
         if (res.ok && isMounted) {
           const data = await res.json();
-          const currProcessing = (data.files || []).filter((f: any) => f.status === 'PROCESSING').length;
+          const currProcessing = (data.files || []).filter((f: any) => f.status === 'PROCESSING' || f.status === 'CANCELLATION_REQUESTED').length;
 
           // If all just finished, fire celebratory confetti
           if (prevProcessingCountRef.current > 0 && currProcessing === 0) {
@@ -297,6 +299,48 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCancelSingle = async (fileId: string) => {
+    // 1. Immediately set status to CANCELLATION_REQUESTED so user sees instant feedback
+    setFiles(prev => prev.map(f => f.id === fileId ? {
+      ...f,
+      status: 'CANCELLATION_REQUESTED'
+    } : f));
+
+    try {
+      const res = await fetch(`${API_BASE}/api/cancel/${fileId}`, { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || errJson.error || 'Failed to cancel conversion');
+      }
+    } catch (err: any) {
+      console.error('Cancel error:', err);
+      setErrorToast(err.message || 'Error requesting cancellation');
+    } finally {
+      await fetchFiles();
+    }
+  };
+
+  const handleCancelAll = async () => {
+    // Immediately set all processing files to CANCELLATION_REQUESTED
+    setFiles(prev => prev.map(f => f.status === 'PROCESSING' ? {
+      ...f,
+      status: 'CANCELLATION_REQUESTED'
+    } : f));
+
+    try {
+      const res = await fetch(`${API_BASE}/api/cancel-all`, { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || errJson.error || 'Failed to cancel all conversions');
+      }
+    } catch (err: any) {
+      console.error('Cancel all error:', err);
+      setErrorToast(err.message || 'Error requesting cancellation');
+    } finally {
+      await fetchFiles();
+    }
+  };
+
   const handleDownload = async (fileId: string, customFilename?: string) => {
     try {
       const res = await fetch(`${API_BASE}/api/download/${fileId}`);
@@ -450,7 +494,7 @@ export const App: React.FC = () => {
             <ShieldCheck size={20} color="#ffffff" />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{
+            <span className="brand-text-animated" style={{
               fontSize: '1.2rem',
               fontWeight: 800,
               letterSpacing: '-0.02em',
@@ -536,7 +580,7 @@ export const App: React.FC = () => {
               color: '#ffffff',
               marginBottom: '16px'
             }}>
-              Doclear
+              <span className="brand-text-animated">Doclear</span>
             </h1>
 
             <p style={{
@@ -550,9 +594,9 @@ export const App: React.FC = () => {
             </p>
           </div>
 
-          {/* Central File Upload Panel (Wordzen AI Prompt Box Style) */}
+          {/* Central File Upload Panel with continuous glowing circular highlight (Flowtica / Screenshot 1) */}
           <div 
-            className={`ai-prompt-box ${isDragging ? 'is-dragging' : ''}`}
+            className={`ai-prompt-box border-beam-card ${isDragging ? 'is-dragging' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={(e) => {
@@ -840,152 +884,175 @@ export const App: React.FC = () => {
         </section>
       )}
 
-      {/* PAGE B: PROCESS DASHBOARD (Image 1 Inspiration) */}
+      {/* PAGE B: PROCESS DASHBOARD (with Fyntic Cosmic Ambient Background) */}
       {activePage === 'process' && (
-        <section className="page-container">
-          {/* Queue Header Bar (Image 1 top bar) */}
-          <div className="queue-toolbar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <h3 style={{ fontSize: '1.18rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#ffffff' }}>
-                Processing Queue ({totalFiles} files)
-              </h3>
-              {readyFilesCount > 0 && (
-                <span className="badge badge-ready">{readyFilesCount} Pending</span>
-              )}
-              {processedFilesCount > 0 && (
-                <span className="badge badge-success">{processedFilesCount} Cleaned</span>
-              )}
-            </div>
+        <section className="page-container process-page-wrapper">
+          {/* Fyntic Cosmic Ambient Background (Requirement 5 & Screenshot 3) */}
+          <FynticBackground />
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              {readyFilesCount > 0 && (
-                <button
-                  onClick={handleProcessAll}
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.88rem', padding: '9px 20px' }}
-                >
-                  <Play size={15} /> Remove Disclaimers from All
-                </button>
-              )}
-
-              {processedFilesCount > 0 && (
-                <button
-                  onClick={handleDownloadAll}
-                  className="btn btn-action"
-                  style={{ fontSize: '0.88rem', padding: '9px 20px' }}
-                >
-                  <Download size={15} /> Download All (ZIP)
-                </button>
-              )}
-
-              {totalFiles > 0 && (
-                <button
-                  onClick={handleClearAll}
-                  className="btn btn-danger-ghost"
-                  style={{ fontSize: '0.85rem', padding: '8px 16px' }}
-                  title="Clear all uploaded documents"
-                >
-                  <Trash2 size={15} /> Clear Files
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 4 Summary Statistic Cards (Image 1 Layout) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px'
-          }}>
-            <div className="metric-card">
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Uploaded Documents
+          <div className="process-page-content">
+            {/* Queue Header Bar */}
+            <div className="queue-toolbar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '1.18rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#ffffff' }}>
+                  Processing Queue ({totalFiles} files)
+                </h3>
+                {readyFilesCount > 0 && (
+                  <span className="badge badge-ready">{readyFilesCount} Pending</span>
+                )}
+                {processedFilesCount > 0 && (
+                  <span className="badge badge-success">{processedFilesCount} Cleaned</span>
+                )}
+                {isAnyProcessing && (
+                  <span className="badge badge-processing">
+                    <Clock size={12} className="spin-slow" /> Processing Active
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '6px' }}>
-                {totalFiles}
-              </div>
-            </div>
 
-            <div className="metric-card">
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Pages Audited
-              </div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#7094ff', marginTop: '6px' }}>
-                {totalPages}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {isAnyProcessing && (
+                  <button
+                    onClick={handleCancelAll}
+                    className="btn btn-stop-all btn-glow-beam-danger btn-roll"
+                    style={{ fontSize: '0.88rem', padding: '9px 18px' }}
+                    title="Stop all currently active conversions"
+                  >
+                    <RollText text="Stop All Conversions" icon={<Square size={13} fill="#f87171" />} iconPosition="left" />
+                  </button>
+                )}
+
+                {readyFilesCount > 0 && (
+                  <button
+                    onClick={handleProcessAll}
+                    className="btn btn-primary btn-glow-beam btn-roll"
+                    style={{ fontSize: '0.88rem', padding: '9px 20px' }}
+                  >
+                    <RollText text="Remove Disclaimers from All" icon={<Play size={15} />} iconPosition="left" />
+                  </button>
+                )}
+
+                {processedFilesCount > 0 && (
+                  <button
+                    onClick={handleDownloadAll}
+                    className="btn btn-action btn-glow-beam-emerald btn-roll"
+                    style={{ fontSize: '0.88rem', padding: '9px 20px' }}
+                  >
+                    <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
+                  </button>
+                )}
+
+                {totalFiles > 0 && (
+                  <button
+                    onClick={handleClearAll}
+                    className="btn btn-danger-ghost btn-roll"
+                    style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                    title="Clear all uploaded documents"
+                  >
+                    <RollText text="Clear Files" icon={<Trash2 size={15} />} iconPosition="left" />
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="metric-card">
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Disclaimers Scrubbed
-              </div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#34d399', marginTop: '6px' }}>
-                {totalDisclaimersRemoved}
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Integrity Preservation
-              </div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#10b981', marginTop: '6px' }}>
-                100%
-              </div>
-            </div>
-          </div>
-
-          {/* Uploaded Document Cards Stacked Vertically */}
-          {totalFiles > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {files.map(file => (
-                <FileItemCard
-                  key={file.id}
-                  file={file}
-                  onProcess={handleProcessSingle}
-                  onViewReport={(f) => setActiveReportFile(f)}
-                  onDownload={handleDownload}
-                />
-              ))}
-            </div>
-          ) : (
+            {/* 4 Summary Statistic Cards (Image 1 Layout) */}
             <div style={{
-              padding: '60px 24px',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              background: 'var(--bg-secondary)',
-              borderRadius: '20px',
-              border: '1px dashed var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '16px',
+              marginBottom: '20px'
             }}>
-              <UploadCloud size={44} style={{ opacity: 0.4, color: '#7094ff' }} />
-              <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff' }}>
-                No documents currently in the processing queue
-              </h4>
-              <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '460px' }}>
-                Upload financial statement PDFs on the Home page or click below to load an instant demo.
-              </p>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button
-                  onClick={() => navigateTo('home')}
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.88rem', padding: '9px 22px' }}
-                >
-                  Go to Home & Upload
-                </button>
-                <button
-                  onClick={handleGenerateSample}
-                  className="btn btn-secondary"
-                  disabled={isUploading}
-                  style={{ fontSize: '0.88rem', padding: '9px 20px' }}
-                >
-                  <Sparkles size={15} color="#7094ff" /> Try Instant Demo
-                </button>
+              <div className="metric-card">
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Uploaded Documents
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '6px' }}>
+                  {totalFiles}
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Pages Audited
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#7094ff', marginTop: '6px' }}>
+                  {totalPages}
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Disclaimers Scrubbed
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#34d399', marginTop: '6px' }}>
+                  {totalDisclaimersRemoved}
+                </div>
+              </div>
+
+              <div className="metric-card">
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Integrity Preservation
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#10b981', marginTop: '6px' }}>
+                  100%
+                </div>
               </div>
             </div>
-          )}
+
+            {/* Uploaded Document Cards Stacked Vertically */}
+            {totalFiles > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {files.map(file => (
+                  <FileItemCard
+                    key={file.id}
+                    file={file}
+                    onProcess={handleProcessSingle}
+                    onCancel={handleCancelSingle}
+                    onViewReport={(f) => setActiveReportFile(f)}
+                    onDownload={handleDownload}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                padding: '60px 24px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                background: 'var(--bg-secondary)',
+                borderRadius: '20px',
+                border: '1px dashed var(--border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <UploadCloud size={44} style={{ opacity: 0.4, color: '#7094ff' }} />
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff' }}>
+                  No documents currently in the processing queue
+                </h4>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '460px' }}>
+                  Upload financial statement PDFs on the Home page or click below to load an instant demo.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button
+                    onClick={() => navigateTo('home')}
+                    className="btn btn-primary btn-glow-beam btn-roll"
+                    style={{ fontSize: '0.88rem', padding: '9px 22px' }}
+                  >
+                    <RollText text="Go to Home & Upload" icon={<ArrowRight size={14} />} iconPosition="right" />
+                  </button>
+                  <button
+                    onClick={handleGenerateSample}
+                    className="btn btn-secondary btn-roll"
+                    disabled={isUploading}
+                    style={{ fontSize: '0.88rem', padding: '9px 20px' }}
+                  >
+                    <RollText text="Try Instant Demo" icon={<Sparkles size={15} color="#7094ff" />} iconPosition="left" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </section>
       )}
 
@@ -1015,21 +1082,22 @@ export const App: React.FC = () => {
             {convertedFiles.length > 0 && (
               <button
                 onClick={handleDownloadAll}
-                className="btn btn-action"
+                className="btn btn-action btn-glow-beam-emerald btn-roll"
                 style={{ fontSize: '0.88rem', padding: '9px 20px' }}
               >
-                <Download size={15} /> Download All (ZIP)
+                <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
               </button>
             )}
           </div>
 
           {convertedFiles.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
               {convertedFiles.map(file => (
                 <FileItemCard
                   key={file.id}
                   file={file}
                   onProcess={handleProcessSingle}
+                  onCancel={handleCancelSingle}
                   onViewReport={(f) => setActiveReportFile(f)}
                   onDownload={handleDownload}
                 />
