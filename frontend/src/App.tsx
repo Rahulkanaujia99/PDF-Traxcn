@@ -463,13 +463,11 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Shared Horizontal Navigation Bar (Image 2 Inspiration) */}
-      <header style={{
+      {/* Shared Horizontal Navigation Bar (Image 2 Inspiration: Fully Transparent Header) */}
+      <header className="main-header" style={{
         padding: '16px 36px',
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'rgba(5, 8, 23, 0.95)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
+        borderBottom: 'none',
+        background: 'transparent',
         position: 'sticky',
         top: 0,
         zIndex: 50,
@@ -888,7 +886,7 @@ export const App: React.FC = () => {
         <section className="page-container process-page-wrapper">
           <div className="process-page-content">
             {/* Queue Header Bar */}
-            <div className="queue-toolbar">
+            <div className="queue-toolbar border-beam-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <h3 style={{ fontSize: '1.18rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#ffffff' }}>
                   Processing Queue ({totalFiles} files)
@@ -910,7 +908,7 @@ export const App: React.FC = () => {
                 {isAnyProcessing && (
                   <button
                     onClick={handleCancelAll}
-                    className="btn btn-stop-all btn-glow-beam-danger btn-roll"
+                    className="btn btn-stop-all btn-glow-beam btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 18px' }}
                     title="Stop all currently active conversions"
                   >
@@ -931,7 +929,7 @@ export const App: React.FC = () => {
                 {processedFilesCount > 0 && (
                   <button
                     onClick={handleDownloadAll}
-                    className="btn btn-action btn-glow-beam-emerald btn-roll"
+                    className="btn btn-action btn-glow-beam btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 20px' }}
                   >
                     <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
@@ -941,7 +939,7 @@ export const App: React.FC = () => {
                 {totalFiles > 0 && (
                   <button
                     onClick={handleClearAll}
-                    className="btn btn-danger-ghost btn-roll"
+                    className="btn btn-danger-ghost btn-glow-beam btn-roll"
                     style={{ fontSize: '0.85rem', padding: '8px 16px' }}
                     title="Clear all uploaded documents"
                   >
@@ -953,7 +951,7 @@ export const App: React.FC = () => {
 
             {/* 4 Summary Statistic Cards (Consistent Responsive Gap) */}
             <div className="metrics-grid">
-              <div className="metric-card">
+              <div className="metric-card border-beam-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Uploaded Documents
                 </div>
@@ -962,7 +960,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card">
+              <div className="metric-card border-beam-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Pages Audited
                 </div>
@@ -971,7 +969,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card">
+              <div className="metric-card border-beam-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Disclaimers Scrubbed
                 </div>
@@ -980,7 +978,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card">
+              <div className="metric-card border-beam-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Integrity Preservation
                 </div>
@@ -1005,7 +1003,7 @@ export const App: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div style={{
+              <div className="empty-state-box border-beam-card" style={{
                 padding: '60px 24px',
                 textAlign: 'center',
                 color: 'var(--text-muted)',
@@ -1034,7 +1032,7 @@ export const App: React.FC = () => {
                   </button>
                   <button
                     onClick={handleGenerateSample}
-                    className="btn btn-secondary btn-roll"
+                    className="btn btn-secondary btn-glow-beam btn-roll"
                     disabled={isUploading}
                     style={{ fontSize: '0.88rem', padding: '9px 20px' }}
                   >
@@ -1049,18 +1047,8 @@ export const App: React.FC = () => {
 
       {/* PAGE C: SHOW DOCUMENTS */}
       {activePage === 'documents' && (
-        <section className="page-container">
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 24px',
-            background: 'var(--bg-secondary)',
-            borderRadius: '16px',
-            border: '1px solid var(--border-subtle)',
-            flexWrap: 'wrap',
-            gap: '14px'
-          }}>
+        <section className="page-container documents-page-wrapper">
+          <div className="documents-header-box border-beam-card">
             <div>
               <h3 style={{ fontSize: '1.18rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#ffffff' }}>
                 Converted Documents ({convertedFiles.length})
@@ -1073,7 +1061,7 @@ export const App: React.FC = () => {
             {convertedFiles.length > 0 && (
               <button
                 onClick={handleDownloadAll}
-                className="btn btn-action btn-glow-beam-emerald btn-roll"
+                className="btn btn-action btn-glow-beam btn-roll"
                 style={{ fontSize: '0.88rem', padding: '9px 20px' }}
               >
                 <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
@@ -1095,7 +1083,7 @@ export const App: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div style={{
+            <div className="empty-state-box border-beam-card" style={{
               padding: '60px 24px',
               textAlign: 'center',
               color: 'var(--text-muted)',
@@ -1116,10 +1104,10 @@ export const App: React.FC = () => {
               </p>
               <button
                 onClick={() => navigateTo('home')}
-                className="btn btn-primary"
+                className="btn btn-primary btn-glow-beam btn-roll"
                 style={{ fontSize: '0.88rem', padding: '9px 22px', marginTop: '8px' }}
               >
-                Go to Home & Upload
+                <RollText text="Go to Home & Upload" icon={<ArrowRight size={14} />} iconPosition="right" />
               </button>
             </div>
           )}

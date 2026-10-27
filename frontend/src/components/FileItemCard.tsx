@@ -133,7 +133,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
   const isProcessed = ['SUCCESS', 'NO_MATCH', 'NEEDS_REVIEW'].includes(file.status);
 
   return (
-    <div className="glass-panel" style={{
+    <div className="glass-panel border-beam-card" style={{
       padding: '22px 26px',
       display: 'flex',
       flexDirection: 'column',
@@ -296,7 +296,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {(isProcessed || file.status === 'VALIDATION_FAILED') && (
             <button
               onClick={() => onViewReport(file)}
-              className="btn btn-secondary btn-roll"
+              className="btn btn-secondary btn-glow-beam btn-roll"
               style={{ fontSize: '0.82rem', padding: '6px 16px' }}
               title="View QA validation certificate"
             >
@@ -330,7 +330,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {file.status === 'PROCESSING' && (
             <button
               onClick={handleStop}
-              className="btn btn-stop-conversion btn-glow-beam-danger btn-roll"
+              className="btn btn-stop-conversion btn-glow-beam btn-roll"
               style={{ fontSize: '0.85rem', padding: '8px 20px' }}
               title="Stop ongoing document conversion"
             >
@@ -341,7 +341,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {file.status === 'CANCELLATION_REQUESTED' && (
             <button
               disabled
-              className="btn btn-stop-conversion"
+              className="btn btn-stop-conversion btn-glow-beam"
               style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
               <Loader2 size={14} className="spin-slow" /> Stopping...
@@ -366,7 +366,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
               </button>
               <button
                 onClick={() => onDownload(file.id, file.filename)}
-                className="btn btn-secondary btn-roll"
+                className="btn btn-secondary btn-glow-beam btn-roll"
                 style={{ fontSize: '0.85rem', padding: '8px 16px' }}
                 title="Download original document"
               >
@@ -393,7 +393,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
               </button>
               <button
                 onClick={() => onDownload(file.id, file.filename)}
-                className="btn btn-secondary btn-roll"
+                className="btn btn-secondary btn-glow-beam btn-roll"
                 style={{ fontSize: '0.85rem', padding: '8px 16px' }}
                 title="Download original document"
               >
@@ -405,7 +405,7 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
           {isProcessed && (
             <button
               onClick={() => onDownload(file.id, file.processed_filename)}
-              className="btn btn-action btn-glow-beam-emerald btn-roll"
+              className="btn btn-action btn-glow-beam btn-roll"
               style={{ fontSize: '0.85rem', padding: '8px 20px' }}
             >
               <RollText 
