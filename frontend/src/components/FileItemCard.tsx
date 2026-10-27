@@ -140,7 +140,10 @@ export const FileItemCard: React.FC<FileItemCardProps> = ({
       gap: '16px',
       position: 'relative',
       borderRadius: '20px',
-      background: 'var(--bg-card)'
+      background: 'rgba(9, 14, 33, 0.35)',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+      border: '1px solid rgba(255, 255, 255, 0.12)'
     }}>
       {/* Top Row: File icon, names, status badge */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
