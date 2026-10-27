@@ -503,9 +503,6 @@ export const App: React.FC = () => {
             }}>
               Doclear
             </span>
-            <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
-              AI-Powered • 100% Vector Preservation
-            </span>
           </div>
         </div>
 
@@ -908,7 +905,7 @@ export const App: React.FC = () => {
                 {isAnyProcessing && (
                   <button
                     onClick={handleCancelAll}
-                    className="btn btn-stop-all btn-glow-beam btn-roll"
+                    className="btn btn-stop-all btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 18px' }}
                     title="Stop all currently active conversions"
                   >
@@ -919,7 +916,7 @@ export const App: React.FC = () => {
                 {readyFilesCount > 0 && (
                   <button
                     onClick={handleProcessAll}
-                    className="btn btn-primary btn-glow-beam btn-roll"
+                    className="btn btn-primary btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 20px' }}
                   >
                     <RollText text="Remove Disclaimers from All" icon={<Play size={15} />} iconPosition="left" />
@@ -929,7 +926,7 @@ export const App: React.FC = () => {
                 {processedFilesCount > 0 && (
                   <button
                     onClick={handleDownloadAll}
-                    className="btn btn-action btn-glow-beam btn-roll"
+                    className="btn btn-action btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 20px' }}
                   >
                     <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
@@ -939,7 +936,7 @@ export const App: React.FC = () => {
                 {totalFiles > 0 && (
                   <button
                     onClick={handleClearAll}
-                    className="btn btn-danger-ghost btn-glow-beam btn-roll"
+                    className="btn btn-danger-ghost btn-roll"
                     style={{ fontSize: '0.85rem', padding: '8px 16px' }}
                     title="Clear all uploaded documents"
                   >
@@ -949,9 +946,9 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* 4 Summary Statistic Cards (Consistent Responsive Gap) */}
+            {/* 4 Summary Statistic Cards (Clean Static Borders with Quantiva Hover Lift) */}
             <div className="metrics-grid">
-              <div className="metric-card border-beam-card">
+              <div className="metric-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Uploaded Documents
                 </div>
@@ -960,7 +957,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card border-beam-card">
+              <div className="metric-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Pages Audited
                 </div>
@@ -969,7 +966,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card border-beam-card">
+              <div className="metric-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Disclaimers Scrubbed
                 </div>
@@ -978,7 +975,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="metric-card border-beam-card">
+              <div className="metric-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Integrity Preservation
                 </div>
@@ -1003,7 +1000,7 @@ export const App: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="empty-state-box border-beam-card" style={{
+              <div className="empty-state-box" style={{
                 padding: '60px 24px',
                 textAlign: 'center',
                 color: 'var(--text-muted)',
@@ -1025,14 +1022,14 @@ export const App: React.FC = () => {
                 <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                   <button
                     onClick={() => navigateTo('home')}
-                    className="btn btn-primary btn-glow-beam btn-roll"
+                    className="btn btn-primary btn-roll"
                     style={{ fontSize: '0.88rem', padding: '9px 22px' }}
                   >
                     <RollText text="Go to Home & Upload" icon={<ArrowRight size={14} />} iconPosition="right" />
                   </button>
                   <button
                     onClick={handleGenerateSample}
-                    className="btn btn-secondary btn-glow-beam btn-roll"
+                    className="btn btn-secondary btn-roll"
                     disabled={isUploading}
                     style={{ fontSize: '0.88rem', padding: '9px 20px' }}
                   >
@@ -1061,7 +1058,7 @@ export const App: React.FC = () => {
             {convertedFiles.length > 0 && (
               <button
                 onClick={handleDownloadAll}
-                className="btn btn-action btn-glow-beam btn-roll"
+                className="btn btn-action btn-roll"
                 style={{ fontSize: '0.88rem', padding: '9px 20px' }}
               >
                 <RollText text="Download All (ZIP)" icon={<Download size={15} />} iconPosition="left" />
@@ -1083,7 +1080,7 @@ export const App: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="empty-state-box border-beam-card" style={{
+            <div className="empty-state-box" style={{
               padding: '60px 24px',
               textAlign: 'center',
               color: 'var(--text-muted)',
@@ -1104,7 +1101,7 @@ export const App: React.FC = () => {
               </p>
               <button
                 onClick={() => navigateTo('home')}
-                className="btn btn-primary btn-glow-beam btn-roll"
+                className="btn btn-primary btn-roll"
                 style={{ fontSize: '0.88rem', padding: '9px 22px', marginTop: '8px' }}
               >
                 <RollText text="Go to Home & Upload" icon={<ArrowRight size={14} />} iconPosition="right" />
