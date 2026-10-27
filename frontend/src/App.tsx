@@ -8,7 +8,6 @@ import confetti from 'canvas-confetti';
 import { FileItemCard } from './components/FileItemCard';
 import type { FileRecord } from './components/FileItemCard';
 import { ValidationReportModal } from './components/ValidationReportModal';
-import { ConduitBackground } from './components/ConduitBackground';
 import { FynticBackground } from './components/FynticBackground';
 import { RollText } from './components/RollText';
 import { AnimatedUploadButton } from './components/AnimatedUploadButton';
@@ -431,8 +430,11 @@ export const App: React.FC = () => {
   });
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'transparent', position: 'relative' }}>
       
+      {/* Global Fyntic 3D Space Warp Particle Engine with Central Blue Glow across ALL pages */}
+      <FynticBackground />
+
       {/* Toast Notification */}
       {errorToast && (
         <div style={{
@@ -551,12 +553,9 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* PAGE A: HOME (Image 3 Inspiration with Conduitz wave particle animation) */}
+      {/* PAGE A: HOME (with Fyntic 3D Space Warp Particles and Glowing Highlight) */}
       {activePage === 'home' && (
         <section className="hero-wrapper">
-          {/* Conduitz-Inspired Subtle Wave Particle Background */}
-          <ConduitBackground />
-
           {/* Hero Content */}
           <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', width: '100%', marginBottom: '32px' }}>
             <div style={{ display: 'inline-flex', marginBottom: '18px' }}>
@@ -884,14 +883,10 @@ export const App: React.FC = () => {
         </section>
       )}
 
-      {/* PAGE B: PROCESS DASHBOARD (with Fyntic Cosmic Ambient Background) */}
+      {/* PAGE B: PROCESS DASHBOARD */}
       {activePage === 'process' && (
-        <>
-          {/* Fyntic Cosmic Ambient Background - Full Viewport Coverage */}
-          <FynticBackground />
-
-          <section className="page-container process-page-wrapper">
-            <div className="process-page-content">
+        <section className="page-container process-page-wrapper">
+          <div className="process-page-content">
             {/* Queue Header Bar */}
             <div className="queue-toolbar">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -956,13 +951,8 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* 4 Summary Statistic Cards (Image 1 Layout) */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '16px',
-              marginBottom: '20px'
-            }}>
+            {/* 4 Summary Statistic Cards (Consistent Responsive Gap) */}
+            <div className="metrics-grid">
               <div className="metric-card">
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Uploaded Documents
@@ -1002,7 +992,7 @@ export const App: React.FC = () => {
 
             {/* Uploaded Document Cards Stacked Vertically */}
             {totalFiles > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="files-queue-list">
                 {files.map(file => (
                   <FileItemCard
                     key={file.id}
@@ -1055,7 +1045,6 @@ export const App: React.FC = () => {
             )}
           </div>
         </section>
-        </>
       )}
 
       {/* PAGE C: SHOW DOCUMENTS */}

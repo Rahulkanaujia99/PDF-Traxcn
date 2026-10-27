@@ -349,7 +349,7 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  overflow: hidden;
+  overflow: visible; /* Allows thick outer glowing perimeter beam to bloom unclipped */
   z-index: 1;
 }
 
@@ -377,6 +377,8 @@ body {
   background: rgba(8, 14, 32, 0.75);
   gap: 12px;
   flex-wrap: wrap;
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
 }
 
 /* Header Live Date & Time Display */
@@ -605,9 +607,11 @@ body {
   padding: 36px 24px 80px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 26px;
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   flex: 1;
+  position: relative;
+  z-index: 1;
 }
 
 /* Image 1 Process Dashboard Toolbar */
@@ -615,12 +619,47 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: 18px 26px;
   background: var(--bg-secondary);
   border-radius: 16px;
   border: 1px solid var(--border-subtle);
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* 4 Summary Statistic Cards Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 1040px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 620px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .page-container {
+    padding: 24px 16px 60px;
+    gap: 20px;
+  }
+}
+
+/* Files queue vertical stack */
+.files-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
 }
 
 /* Horizontal Light Streak Animation (Image 4 & Dribbble 1) */
@@ -752,7 +791,7 @@ body {
   letter-spacing: -0.01em;
   color: #ffffff;
   cursor: pointer;
-  overflow: hidden;
+  overflow: visible; /* Preserves outer glowing perimeter beam */
   user-select: none;
   outline: none;
   transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -893,10 +932,10 @@ body {
   --beam-color-emerald: #10b981;
   --beam-color-rose: #f43f5e;
   --beam-color-amber: #f59e0b;
-  --beam-duration: 6s;
-  --beam-btn-duration: 6s;
+  --beam-duration: 5.5s;
+  --beam-btn-duration: 4s;
   --btn-roll-duration: 0.32s;
-  --glow-intensity: 0.65;
+  --glow-intensity: 0.85;
 }
 
 /* Conic gradient rotation property for smooth border orbiting beam */
@@ -915,7 +954,7 @@ body {
   }
 }
 
-/* 1. Animated Border Beam Around Containers (Upload Document Section - Hover Only, Outside Perimeter) */
+/* 1. Animated Thick Glowing Border Beam Around Containers (Upload Document Section - Continuous Outer Perimeter) */
 .border-beam-card {
   position: relative;
   border-radius: 24px;
@@ -924,37 +963,40 @@ body {
 .border-beam-card::before {
   content: '';
   position: absolute;
-  inset: -1.5px;
-  border-radius: inherit;
-  padding: 1.5px;
+  inset: -2.8px;
+  border-radius: 26.8px;
+  padding: 2.8px;
   background: conic-gradient(
     from var(--beam-angle, 0deg) at 50% 50%,
     transparent 0deg,
-    transparent 240deg,
-    rgba(56, 189, 248, 0.45) 285deg,
-    rgba(99, 102, 241, 0.9) 325deg,
-    #ffffff 352deg,
-    rgba(244, 63, 94, 0.85) 360deg
+    transparent 230deg,
+    rgba(56, 189, 248, 0.5) 265deg,
+    rgba(99, 102, 241, 0.95) 305deg,
+    rgba(217, 70, 239, 0.98) 330deg,
+    #ffffff 348deg,
+    rgba(251, 146, 60, 0.98) 356deg,
+    rgba(244, 63, 94, 0.92) 360deg
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.35s ease;
-  animation: borderBeamRotate var(--beam-duration) linear infinite;
+  opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.85)) drop-shadow(0 0 20px rgba(99, 102, 241, 0.65));
+  animation: borderBeamRotate var(--beam-duration, 5.5s) linear infinite;
   z-index: 2;
+  transition: filter 0.35s ease;
 }
 
-/* Show traveling glowing border ONLY on hover, focus, or drag (Reference Images 1 & 2) */
+/* Enhanced outer bloom on hover without touching content */
 .border-beam-card:hover::before,
 .border-beam-card:focus-within::before,
 .border-beam-card.is-dragging::before {
-  opacity: 1;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 28px rgba(99, 102, 241, 0.85));
 }
 
-/* 2. Animated Borders on Buttons (Flowtica & Screenshot 1) */
+/* 2. Animated Thick Glowing Borders on Buttons (Flowtica & Reference Screenshots 2, 4) */
 .btn-glow-beam {
   position: relative;
   isolation: isolate;
@@ -963,24 +1005,28 @@ body {
 .btn-glow-beam::before {
   content: '';
   position: absolute;
-  inset: -1.5px;
+  inset: -2.2px;
   border-radius: inherit;
-  padding: 1.5px;
+  padding: 2.2px;
   background: conic-gradient(
     from var(--beam-angle, 0deg) at 50% 50%,
     transparent 0deg,
-    transparent 260deg,
-    rgba(56, 189, 248, 0.5) 295deg,
-    rgba(99, 102, 241, 0.95) 330deg,
-    #ffffff 352deg,
-    rgba(244, 63, 94, 0.8) 360deg
+    transparent 245deg,
+    rgba(56, 189, 248, 0.55) 280deg,
+    rgba(99, 102, 241, 0.95) 315deg,
+    rgba(217, 70, 239, 0.95) 338deg,
+    #ffffff 350deg,
+    rgba(251, 146, 60, 0.95) 356deg,
+    rgba(244, 63, 94, 0.9) 360deg
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
-  animation: borderBeamRotate var(--beam-btn-duration) linear infinite;
+  opacity: 1;
+  filter: drop-shadow(0 0 7px rgba(56, 189, 248, 0.85)) drop-shadow(0 0 14px rgba(99, 102, 241, 0.65));
+  animation: borderBeamRotate var(--beam-btn-duration, 4s) linear infinite;
   z-index: 3;
 }
 
@@ -989,12 +1035,13 @@ body {
   background: conic-gradient(
     from var(--beam-angle, 0deg) at 50% 50%,
     transparent 0deg,
-    transparent 260deg,
-    rgba(16, 185, 129, 0.4) 295deg,
-    rgba(52, 211, 153, 0.9) 330deg,
-    #ffffff 352deg,
-    rgba(6, 182, 212, 0.8) 360deg
+    transparent 245deg,
+    rgba(16, 185, 129, 0.45) 280deg,
+    rgba(52, 211, 153, 0.95) 320deg,
+    #ffffff 350deg,
+    rgba(6, 182, 212, 0.9) 360deg
   );
+  filter: drop-shadow(0 0 7px rgba(52, 211, 153, 0.85)) drop-shadow(0 0 14px rgba(16, 185, 129, 0.65));
 }
 
 /* Rose / Amber variant for Stop Conversion button */
@@ -1002,12 +1049,13 @@ body {
   background: conic-gradient(
     from var(--beam-angle, 0deg) at 50% 50%,
     transparent 0deg,
-    transparent 260deg,
-    rgba(245, 158, 11, 0.45) 295deg,
-    rgba(239, 68, 68, 0.95) 330deg,
-    #ffffff 352deg,
-    rgba(244, 63, 94, 0.85) 360deg
+    transparent 245deg,
+    rgba(245, 158, 11, 0.5) 280deg,
+    rgba(239, 68, 68, 0.95) 320deg,
+    #ffffff 350deg,
+    rgba(244, 63, 94, 0.9) 360deg
   );
+  filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.85)) drop-shadow(0 0 14px rgba(244, 63, 94, 0.65));
 }
 
 /* 3. Button Rolling Text Hover Effects (Screenshot 2 - "Get Started") */
@@ -1155,6 +1203,10 @@ body {
 .process-page-content {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  width: 100%;
 }
 
 /* Accessibility: Respect prefers-reduced-motion */
